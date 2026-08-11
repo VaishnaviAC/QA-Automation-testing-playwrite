@@ -1,11 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 
-/**
- * In Cypress, you likely wrote cy.visit() inside beforeEach.
- * In Playwright, test.beforeEach does the same job — it runs before every
- * test in this file, so each test starts fresh and independently.
- */
+
+ 
 test.describe('AssetIQ - Login Page', () => {
   let loginPage: LoginPage;
 
@@ -24,7 +21,7 @@ test.describe('AssetIQ - Login Page', () => {
   });
 
   test('TC_LOGIN_002: Valid credentials log in successfully', async ({ page }) => {
-    await loginPage.login('admin@accurateic.in', '1234');
+    await loginPage.login('admin@accurateic.in', '12345');
 
     // A URL assertion can be added here later once the exact post-login
     // URL is confirmed, e.g.:
@@ -55,17 +52,9 @@ test.describe('AssetIQ - Login Page', () => {
     // Submitting directly with both fields left empty
     await loginPage.signInButton.click();
 
-    // The codegen recording didn't capture any new visible error text on
-    // empty submit, so this is the safest, universally-true assertion:
-    // the user is still on the login page (did not reach the dashboard).
-    // This will pass whether it's native HTML5 validation, a custom error,
-    // or the button simply being inactive.
     await expect(loginPage.signOutButton).not.toBeVisible();
     await expect(loginPage.emailInput).toBeVisible();
 
-    // Note: if you find out the exact error message shown here
-    // (e.g. "Email is required"), let me know and this test can be
-    // made more specific.
   });
 
   test('TC_LOGIN_006: Password field visibility can be toggled', async () => {

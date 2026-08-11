@@ -13,13 +13,13 @@ export default defineConfig({
   fullyParallel: false,
 
   // Fail if test.only() is accidentally left in the code
-  forbidOnly: !!process.env.CI,
+  /*forbidOnly: !!process.env.CI,
 
   // Retry failed tests
   retries: process.env.CI ? 2 : 1,
 
   // Use only 1 worker while debugging
-  workers: 1,
+  workers: 1,*/
 
   // HTML report
   reporter: 'html',

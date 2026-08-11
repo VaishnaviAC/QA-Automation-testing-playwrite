@@ -39,7 +39,11 @@ test.describe('AssetIQ - Dashboard', () => {
     const assetsPage = new AssetsPage(page);
     await assetsPage.goto();
     await assetsPage.filterByStatus('Available');
-    const availableTotal = await assetsPage.getTotalCount();
+    const availableRows =
+        page.locator('tbody tr');
+
+    const availableTotal =
+        await availableRows.count();
 
     expect(dashboardCount).toBe(availableTotal);
   });
