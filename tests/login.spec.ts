@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
+import { loginData } from '../test-data/loginData';
 
 /**
  * In Cypress, you likely wrote cy.visit() inside beforeEach.
@@ -24,7 +25,7 @@ test.describe('AssetIQ - Login Page', () => {
   });
 
   test('TC_LOGIN_002: Valid credentials log in successfully', async ({ page }) => {
-    await loginPage.login('admin@accurateic.in', '12345');
+    await loginPage.login(loginData.validUser.email, loginData.validUser.password);
 
     // The success toast appears briefly right after login, so we check
     // it before checking the dashboard's "Sign out" button — otherwise
@@ -41,9 +42,9 @@ test.describe('AssetIQ - Login Page', () => {
   });
 
   test('TC_LOGIN_003: Invalid password shows error and stays on login page', async ({ page }) => {
-    await loginPage.login('admin@accurateic.in', 'wrong@123');
+    await loginPage.login(loginData.validUser.email, loginData.invalidUser.wrongPassword);
 
-    await expect(loginPage.errorMessage('Incorrect password')).toBeVisible();
+    await expect(loginPage.errorMessage(loginData.errorMessages.incorrectPassword)).toBeVisible();
 
     // Confirming the user is still on the login page —
     // the dashboard's "Sign out" button should NOT be visible
@@ -51,9 +52,9 @@ test.describe('AssetIQ - Login Page', () => {
   });
 
   test('TC_LOGIN_004: Invalid email format shows validation error', async () => {
-    await loginPage.login('abcde', '12345');
+    await loginPage.login(loginData.invalidUser.malformedEmail, loginData.validUser.password);
 
-    await expect(loginPage.errorMessage('Enter a valid email address')).toBeVisible();
+    await expect(loginPage.errorMessage(loginData.errorMessages.invalidEmailFormat)).toBeVisible();
   });
 
   test('TC_LOGIN_005: Empty submit does not log the user in', async ({ page }) => {
@@ -74,7 +75,7 @@ test.describe('AssetIQ - Login Page', () => {
   });
 
   test('TC_LOGIN_006: Password field visibility can be toggled', async () => {
-    await loginPage.passwordInput.fill('12345');
+    await loginPage.passwordInput.fill(loginData.validUser.password);
 
     // By default, a password field's "type" attribute is "password",
     // which is what makes the browser mask the characters with dots.
