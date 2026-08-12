@@ -7,6 +7,14 @@ import { AssignmentsPage } from '../pages/AssignmentsPage';
 import { AuditLogsPage } from '../pages/AuditLogsPage';
 
 test.describe('AssetIQ - Dashboard', () => {
+  // This suite runs against a single shared admin login on a real,
+  // local-network backend (not a stateless test environment). Running
+  // these tests in parallel (multiple browser tabs filtering the Assets
+  // list at the same time, under the same account) can cause one test's
+  // filter selection to interfere with another's. Running them serially
+  // avoids that cross-test interference.
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeEach(async ({ page }) => {
     // Login is only a precondition here, not a separate test case —
     // login itself is already covered by TC_LOGIN_002 in login.spec.ts.
@@ -24,6 +32,11 @@ test.describe('AssetIQ - Dashboard', () => {
 
     const assetsPage = new AssetsPage(page);
     await assetsPage.goto();
+
+    // Always read the total from the "Assets: X-Y of Z" text via
+    // getTotalCount() — never count visible rows with .count(), since
+    // the list is paginated (only ~12 rows show per page) and counting
+    // rows would give the page size, not the real total.
     const assetsTotal = await assetsPage.getTotalCount();
 
     expect(dashboardCount).toBe(assetsTotal);
@@ -39,11 +52,7 @@ test.describe('AssetIQ - Dashboard', () => {
     const assetsPage = new AssetsPage(page);
     await assetsPage.goto();
     await assetsPage.filterByStatus('Available');
-    const availableRows =
-        page.locator('tbody tr');
-
-    const availableTotal =
-        await availableRows.count();
+    const availableTotal = await assetsPage.getTotalCount();
 
     expect(dashboardCount).toBe(availableTotal);
   });
@@ -106,38 +115,26 @@ test.describe('AssetIQ - Dashboard', () => {
     expect(dashboardCount).toBe(assignmentsTotal);
   });
 
-test('TC_DASH_007: Recent Activity shows the same latest 6 entries as Audit Logs', async ({ page }) => {
-  const dashboardPage = new DashboardPage(page);
+  test('TC_DASH_007: Recent Activity shows the same latest 6 entries as Audit Logs', async ({ page }) => {
+    const dashboardPage = new DashboardPage(page);
 
-  // beforeEach already logged in and landed directly on the dashboard —
-  // no separate navigation needed here.
-  await expect(dashboardPage.recentActivityHeading).toBeVisible();
-  await expect(dashboardPage.recentActivityTitle(0)).toBeVisible();
+    // No extra navigation here — beforeEach already logged in and landed
+    // directly on the dashboard. Calling dashboardPage.goto() again would
+    // force a full page reload, which redirected this app back to /login
+    // (the session isn't preserved across a hard reload on this app).
+    await expect(dashboardPage.recentActivityHeading).toBeVisible();
+    await expect(dashboardPage.recentActivityTitle(0)).toBeVisible();
 
-  // Read the first 6 Recent Activity titles
-  const dashboardTitles: string[] = [];
+    // Read the title text of the first 6 Recent Activity entries on the dashboard
+    const dashboardTitles = await dashboardPage.getRecentActivityTitles(6);
 
-  for (let i = 0; i < 6; i++) {
-    const text = await dashboardPage.recentActivityTitle(i).innerText();
+    // Read the Description column of the first 6 rows on the Audit Logs page
+    const auditLogsPage = new AuditLogsPage(page);
+    await auditLogsPage.goto();
+    const auditDescriptions = await auditLogsPage.getFirstNDescriptions(6);
 
-    dashboardTitles.push(
-      text.replace(/\s+/g, ' ').trim()
-    );
-  }
-
-  // Navigate to Audit Logs
-  const auditLogsPage = new AuditLogsPage(page);
-  await auditLogsPage.goto();
-
-  // Read the first 6 Description values
-  const auditDescriptions = await auditLogsPage.getFirstNDescriptions(6);
-
-  // Debug (optional)
-  console.log('Dashboard:', dashboardTitles);
-  console.log('Audit Logs:', auditDescriptions);
-
-  // Compare both arrays
-  expect(dashboardTitles).toEqual(auditDescriptions);
-
-});
+    // toEqual compares arrays element-by-element, in order — both lists
+    // should read identically since both show the most recent entries first.
+    expect(dashboardTitles).toEqual(auditDescriptions);
+  });
 });

@@ -24,6 +24,7 @@ export class LoginPage {
   readonly passwordInput: Locator;
   readonly signInButton: Locator;
   readonly signOutButton: Locator;
+  readonly successMessage: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -40,6 +41,11 @@ export class LoginPage {
     // The "Sign out" button only appears on the dashboard after a
     // successful login, so we use it as proof of a successful login.
     this.signOutButton = page.getByRole('button', { name: 'Sign out' });
+
+    // A brief success toast/message shown right after a successful login
+    // (e.g. "Login successful"). This usually disappears after a few
+    // seconds, so tests need to check it quickly, before it's gone.
+    this.successMessage = page.getByText('Login successful');
   }
 
   /**
