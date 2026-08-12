@@ -5,6 +5,7 @@ import { AssetsPage } from '../pages/AssetsPage';
 import { EmployeesPage } from '../pages/EmployeesPage';
 import { AssignmentsPage } from '../pages/AssignmentsPage';
 import { AuditLogsPage } from '../pages/AuditLogsPage';
+import { dashboardData } from '../test-data/dashboardData';
 
 test.describe('AssetIQ - Dashboard', () => {
   // This suite runs against a single shared admin login on a real,
@@ -20,14 +21,14 @@ test.describe('AssetIQ - Dashboard', () => {
     // login itself is already covered by TC_LOGIN_002 in login.spec.ts.
     const loginPage = new LoginPage(page);
     await loginPage.goto();
-    await loginPage.login('admin@accurateic.in', '12345');
+    await loginPage.login(dashboardData.loginUser.email, dashboardData.loginUser.password);
   });
 
   test('TC_DASH_001: Total Assets card matches the Assets module total', async ({ page }) => {
     const dashboardPage = new DashboardPage(page);
-    await expect(dashboardPage.cardLabel('Total Assets')).toBeVisible();
+    await expect(dashboardPage.cardLabel(dashboardData.cardLabels.totalAssets)).toBeVisible();
 
-    const dashboardCountText = await dashboardPage.cardCount('Total Assets').textContent();
+    const dashboardCountText = await dashboardPage.cardCount(dashboardData.cardLabels.totalAssets).textContent();
     const dashboardCount = parseInt(dashboardCountText ?? '0', 10);
 
     const assetsPage = new AssetsPage(page);
@@ -44,14 +45,14 @@ test.describe('AssetIQ - Dashboard', () => {
 
   test('TC_DASH_002: Available Assets card matches the Assets module (Available filter)', async ({ page }) => {
     const dashboardPage = new DashboardPage(page);
-    await expect(dashboardPage.cardLabel('Available')).toBeVisible();
+    await expect(dashboardPage.cardLabel(dashboardData.cardLabels.available)).toBeVisible();
 
-    const dashboardCountText = await dashboardPage.cardCount('Available').textContent();
+    const dashboardCountText = await dashboardPage.cardCount(dashboardData.cardLabels.available).textContent();
     const dashboardCount = parseInt(dashboardCountText ?? '0', 10);
 
     const assetsPage = new AssetsPage(page);
     await assetsPage.goto();
-    await assetsPage.filterByStatus('Available');
+    await assetsPage.filterByStatus(dashboardData.assetStatusFilters.available);
     const availableTotal = await assetsPage.getTotalCount();
 
     expect(dashboardCount).toBe(availableTotal);
@@ -59,14 +60,14 @@ test.describe('AssetIQ - Dashboard', () => {
 
   test('TC_DASH_003: Assigned Assets card matches the Assets module (Assigned filter)', async ({ page }) => {
     const dashboardPage = new DashboardPage(page);
-    await expect(dashboardPage.cardLabel('Assigned')).toBeVisible();
+    await expect(dashboardPage.cardLabel(dashboardData.cardLabels.assigned)).toBeVisible();
 
-    const dashboardCountText = await dashboardPage.cardCount('Assigned').textContent();
+    const dashboardCountText = await dashboardPage.cardCount(dashboardData.cardLabels.assigned).textContent();
     const dashboardCount = parseInt(dashboardCountText ?? '0', 10);
 
     const assetsPage = new AssetsPage(page);
     await assetsPage.goto();
-    await assetsPage.filterByStatus('Assigned');
+    await assetsPage.filterByStatus(dashboardData.assetStatusFilters.assigned);
     const assignedTotal = await assetsPage.getTotalCount();
 
     expect(dashboardCount).toBe(assignedTotal);
@@ -74,14 +75,14 @@ test.describe('AssetIQ - Dashboard', () => {
 
   test('TC_DASH_004: Maintenance Assets card matches the Assets module (Maintenance filter)', async ({ page }) => {
     const dashboardPage = new DashboardPage(page);
-    await expect(dashboardPage.cardLabel('Maintenance')).toBeVisible();
+    await expect(dashboardPage.cardLabel(dashboardData.cardLabels.maintenance)).toBeVisible();
 
-    const dashboardCountText = await dashboardPage.cardCount('Maintenance').textContent();
+    const dashboardCountText = await dashboardPage.cardCount(dashboardData.cardLabels.maintenance).textContent();
     const dashboardCount = parseInt(dashboardCountText ?? '0', 10);
 
     const assetsPage = new AssetsPage(page);
     await assetsPage.goto();
-    await assetsPage.filterByStatus('Maintenance');
+    await assetsPage.filterByStatus(dashboardData.assetStatusFilters.maintenance);
     const maintenanceTotal = await assetsPage.getTotalCount();
 
     expect(dashboardCount).toBe(maintenanceTotal);
@@ -89,9 +90,9 @@ test.describe('AssetIQ - Dashboard', () => {
 
   test('TC_DASH_005: Total Employees card matches the Employees module total', async ({ page }) => {
     const dashboardPage = new DashboardPage(page);
-    await expect(dashboardPage.cardLabel('Employees')).toBeVisible();
+    await expect(dashboardPage.cardLabel(dashboardData.cardLabels.employees)).toBeVisible();
 
-    const dashboardCountText = await dashboardPage.cardCount('Employees').textContent();
+    const dashboardCountText = await dashboardPage.cardCount(dashboardData.cardLabels.employees).textContent();
     const dashboardCount = parseInt(dashboardCountText ?? '0', 10);
 
     const employeesPage = new EmployeesPage(page);
@@ -103,9 +104,9 @@ test.describe('AssetIQ - Dashboard', () => {
 
   test('TC_DASH_006: Active Assignments card matches the Assignments module total', async ({ page }) => {
     const dashboardPage = new DashboardPage(page);
-    await expect(dashboardPage.cardLabel('Active Assignments')).toBeVisible();
+    await expect(dashboardPage.cardLabel(dashboardData.cardLabels.activeAssignments)).toBeVisible();
 
-    const dashboardCountText = await dashboardPage.cardCount('Active Assignments').textContent();
+    const dashboardCountText = await dashboardPage.cardCount(dashboardData.cardLabels.activeAssignments).textContent();
     const dashboardCount = parseInt(dashboardCountText ?? '0', 10);
 
     const assignmentsPage = new AssignmentsPage(page);
@@ -126,12 +127,12 @@ test.describe('AssetIQ - Dashboard', () => {
     await expect(dashboardPage.recentActivityTitle(0)).toBeVisible();
 
     // Read the title text of the first 6 Recent Activity entries on the dashboard
-    const dashboardTitles = await dashboardPage.getRecentActivityTitles(6);
+    const dashboardTitles = await dashboardPage.getRecentActivityTitles(dashboardData.recentActivityEntryCount);
 
     // Read the Description column of the first 6 rows on the Audit Logs page
     const auditLogsPage = new AuditLogsPage(page);
     await auditLogsPage.goto();
-    const auditDescriptions = await auditLogsPage.getFirstNDescriptions(6);
+    const auditDescriptions = await auditLogsPage.getFirstNDescriptions(dashboardData.recentActivityEntryCount);
 
     // toEqual compares arrays element-by-element, in order — both lists
     // should read identically since both show the most recent entries first.
