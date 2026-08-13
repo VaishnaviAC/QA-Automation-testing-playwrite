@@ -39,18 +39,29 @@ export default defineConfig({
   },
 
   projects: [
+    // Runs once, before chromium/firefox, logs in, and saves the
+    // authenticated session to playwright/.auth/user.json.
+    {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
+    },
+
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/user.json',
       },
+      dependencies: ['setup'],
     },
 
     {
       name: 'firefox',
       use: {
         ...devices['Desktop Firefox'],
+        storageState: 'playwright/.auth/user.json',
       },
+      dependencies: ['setup'],
     },
   ],
 });
