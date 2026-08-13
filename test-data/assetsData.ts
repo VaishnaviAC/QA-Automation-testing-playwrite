@@ -71,13 +71,37 @@ export const boundaryValues = {
   veryLongString: 'A'.repeat(150),
 };
 
-/** Status filter dropdown option labels, as seen in the UI. */
+/**
+ * Status filter dropdown option labels, as seen in the UI when the
+ * dropdown is OPEN (these are the clickable option buttons).
+ * NOTE: 'all' here is the selectable option labeled "All" inside the
+ * dropdown — this is different from statusFilterDefaultLabel below, which
+ * is the trigger button's own default/reset display text ("All Status").
+ */
 export const statusOptions = {
-  all: 'All Status',
+  all: 'All',
   available: 'Available',
   assigned: 'Assigned',
   maintenance: 'Maintenance',
+  retired: 'Retired',
 };
+
+/**
+ * The status filter trigger button's default label, shown on initial page
+ * load and restored after clicking "Clear". Confirmed via codegen/UI.
+ */
+export const statusFilterDefaultLabel = 'All Status';
+
+/** All selectable status options, in dropdown order — used to iterate
+ * every status in a single data-driven test rather than hardcoding one
+ * status per test case. */
+export const allStatusOptions = [
+  statusOptions.all,
+  statusOptions.available,
+  statusOptions.assigned,
+  statusOptions.maintenance,
+  statusOptions.retired,
+];
 
 /** Type filter dropdown option labels, as seen in the UI. */
 export const typeOptions = {

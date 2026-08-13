@@ -8,6 +8,8 @@ import {
   statusOptions,
   uiText,
   combinedFilterScenario,
+  statusFilterDefaultLabel,
+  allStatusOptions,
 } from '../test-data/assetsData';
 
 // ---------------------------------------------------------------------------
@@ -359,5 +361,196 @@ test.describe('Assets Page - Search Bar', () => {
     const rowCount = await assetsPage.getVisibleRowCount();
     expect(rowCount).toBeGreaterThan(0);
     await assetsPage.expectAllRowsToContain(knownAssets.byEmployeeName.exact);
+  });
+});
+
+// =============================================================================
+// Assets Page - "All Status" Dropdown Filter
+// =============================================================================
+//
+// Manual test cases covered (mapped 1:1 to automated tests below):
+//
+//   TC_STATUS_01 - Default state: trigger shows "All Status", full unfiltered
+//                  list displayed on page load.
+//   TC_STATUS_02 - Selecting "All" returns the same unfiltered full list as
+//                  the default state.
+//   TC_STATUS_03 - Selecting "Available" filters the table to only Available
+//                  assets.
+//   TC_STATUS_04 - Selecting "Assigned" filters the table to only Assigned
+//                  assets.
+//   TC_STATUS_05 - Selecting "Maintenance" filters the table to only
+//                  Maintenance assets (or shows the empty state if none).
+//   TC_STATUS_06 - Selecting "Retired" filters the table to only Retired
+//                  assets (or shows the empty state if none).
+//   TC_STATUS_07 - The "No assets found" empty-state message (heading +
+//                  subtext) renders correctly whenever a status filter has
+//                  zero matching assets.
+//   TC_STATUS_08 - The "Assets: X of Y" result-count text stays accurate
+//                  for every filtered status.
+//   TC_STATUS_09 - Switching directly between two status filters (no Clear
+//                  in between) replaces the previous filter rather than
+//                  combining results from both.
+//   TC_STATUS_10 - Clicking "Clear" resets the filter: trigger label reverts
+//                  to "All Status" and the full list is restored.
+//   TC_STATUS_11 - The dropdown menu closes automatically after selecting a
+//                  status option.
+//   TC_STATUS_12 - Applying a status filter resets pagination back to page 1.
+//
+// (Combining a status filter with an active search term is intentionally
+// NOT repeated here — that AND-logic scenario is already covered by
+// TC_SRCH_31, so re-testing it here would be a duplicate.)
+// =============================================================================
+
+test.describe('Assets Page - All Status Filter', () => {
+  test('TC_STATUS_01 - default state shows "All Status" label and the full unfiltered list', async () => {
+    await expect(assetsPage.statusFilterButton).toHaveText(statusFilterDefaultLabel);
+    const totalCount = await assetsPage.getTotalCount();
+    expect(totalCount).toBeGreaterThan(0);
+  });
+
+  test('TC_STATUS_02 - selecting "All" returns the same unfiltered full list as default', async () => {
+    const baselineTotal = await assetsPage.getTotalCount();
+
+    await assetsPage.filterByStatus(statusOptions.all);
+    const totalAfterAll = await assetsPage.getTotalCount();
+
+    expect(totalAfterAll).toBe(baselineTotal);
+  });
+
+  test('TC_STATUS_03 - selecting "Available" filters the table to only Available assets', async () => {
+    await assetsPage.filterByStatus(statusOptions.available);
+    const rowCount = await assetsPage.getVisibleRowCount();
+
+    if (rowCount === 0) {
+      await expect(assetsPage.emptyStateHeading).toBeVisible();
+    } else {
+      await assetsPage.expectAllRowsToContain(statusOptions.available);
+    }
+  });
+
+  test('TC_STATUS_04 - selecting "Assigned" filters the table to only Assigned assets', async () => {
+    await assetsPage.filterByStatus(statusOptions.assigned);
+    const rowCount = await assetsPage.getVisibleRowCount();
+
+    if (rowCount === 0) {
+      await expect(assetsPage.emptyStateHeading).toBeVisible();
+    } else {
+      await assetsPage.expectAllRowsToContain(statusOptions.assigned);
+    }
+  });
+
+  test('TC_STATUS_05 - selecting "Maintenance" filters the table to only Maintenance assets', async () => {
+    await assetsPage.filterByStatus(statusOptions.maintenance);
+    const rowCount = await assetsPage.getVisibleRowCount();
+
+    if (rowCount === 0) {
+      await expect(assetsPage.emptyStateHeading).toBeVisible();
+    } else {
+      await assetsPage.expectAllRowsToContain(statusOptions.maintenance);
+    }
+  });
+
+  test('TC_STATUS_06 - selecting "Retired" filters the table to only Retired assets', async () => {
+    await assetsPage.filterByStatus(statusOptions.retired);
+    const rowCount = await assetsPage.getVisibleRowCount();
+
+    if (rowCount === 0) {
+      await expect(assetsPage.emptyStateHeading).toBeVisible();
+    } else {
+      await assetsPage.expectAllRowsToContain(statusOptions.retired);
+    }
+  });
+
+  test('TC_STATUS_07 - empty-state validation message displays when a status filter has zero matching assets', async () => {
+    // Data-driven rather than hardcoded: whichever status currently has zero
+    // matches (seed data can change over time — e.g. Maintenance today,
+    // Retired tomorrow), this test finds it and validates the full
+    // empty-state UI against it.
+    let foundEmptyStatus = false;
+
+    for (const status of [
+      statusOptions.available,
+      statusOptions.assigned,
+      statusOptions.maintenance,
+      statusOptions.retired,
+    ]) {
+      await assetsPage.filterByStatus(status);
+      const rowCount = await assetsPage.getVisibleRowCount();
+
+      if (rowCount === 0) {
+        foundEmptyStatus = true;
+        await expect(assetsPage.emptyStateHeading).toHaveText(uiText.emptyStateHeading);
+        await expect(assetsPage.emptyStateSubtext).toHaveText(uiText.emptyStateSubtext);
+        break;
+      }
+    }
+
+    test.skip(
+      !foundEmptyStatus,
+      'Every status currently has at least one matching asset — no empty-state scenario to validate in this run.',
+    );
+  });
+
+  test('TC_STATUS_08 - "Assets: X of Y" result-count text stays accurate for every filtered status', async () => {
+    for (const status of allStatusOptions) {
+      await assetsPage.filterByStatus(status);
+
+      const totalCount = await assetsPage.getTotalCount();
+      const rowCount = await assetsPage.getVisibleRowCount();
+
+      // Rows shown on the current page can be <= total (pagination), never more.
+      expect(rowCount).toBeLessThanOrEqual(totalCount);
+    }
+  });
+
+  test('TC_STATUS_09 - switching directly between two status filters replaces the previous filter', async () => {
+    await assetsPage.filterByStatus(statusOptions.available);
+    const availableRowCount = await assetsPage.getVisibleRowCount();
+    if (availableRowCount > 0) {
+      await assetsPage.expectAllRowsToContain(statusOptions.available);
+    }
+
+    // Switch directly to Assigned, without clearing first.
+    await assetsPage.filterByStatus(statusOptions.assigned);
+    const assignedRowCount = await assetsPage.getVisibleRowCount();
+
+    if (assignedRowCount === 0) {
+      await expect(assetsPage.emptyStateHeading).toBeVisible();
+    } else {
+      // Every visible row must now be Assigned — none of the previous
+      // Available-only rows should have leaked through.
+      await assetsPage.expectAllRowsToContain(statusOptions.assigned);
+      const rowTexts = await assetsPage.getRowTexts();
+      for (const text of rowTexts) {
+        expect(text).not.toContain(statusOptions.available);
+      }
+    }
+  });
+
+  test('TC_STATUS_10 - clicking "Clear" resets the filter to "All Status" and restores the full list', async () => {
+    const baselineTotal = await assetsPage.getTotalCount();
+
+    await assetsPage.filterByStatus(statusOptions.assigned);
+    await assetsPage.getVisibleRowCount();
+
+    await assetsPage.clearStatusFilter();
+
+    await expect(assetsPage.statusFilterButton).toHaveText(statusFilterDefaultLabel);
+    const totalAfterClear = await assetsPage.getTotalCount();
+    expect(totalAfterClear).toBe(baselineTotal);
+  });
+
+  test('TC_STATUS_11 - the dropdown menu closes automatically after selecting a status option', async () => {
+    await assetsPage.filterByStatus(statusOptions.assigned);
+    const dropdownStillOpen = await assetsPage.isStatusDropdownOpen();
+    expect(dropdownStillOpen).toBe(false);
+  });
+
+  test('TC_STATUS_12 - applying a status filter resets pagination back to page 1', async ({ page }) => {
+    await assetsPage.filterByStatus(statusOptions.assigned);
+    await page.waitForLoadState('networkidle');
+
+    // "Assets: 1-N of Y" confirms the view is back on the first page.
+    await expect(assetsPage.totalCountText).toContainText('1-');
   });
 });

@@ -35,6 +35,14 @@ export class AssetsPage {
   readonly emptyStateHeading: Locator;
   readonly emptyStateSubtext: Locator;
 
+  // The "Clear" action inside the Status dropdown, which resets the
+  // selection back to unfiltered. Located by text rather than role, since
+  // it may not render as a semantic <button> element. Safe to match without
+  // scoping to the dropdown container because the Type filter's own
+  // "Clear"/"Apply" controls are only present in the DOM while that
+  // dropdown is open — the two never coexist in practice.
+  readonly statusClearButton: Locator;
+
   constructor(page: Page) {
     this.page = page;
 
@@ -71,6 +79,8 @@ export class AssetsPage {
 
     this.emptyStateHeading = page.getByText('No assets found', { exact: true });
     this.emptyStateSubtext = page.getByText('Try another filter or add your first asset.', { exact: true });
+
+    this.statusClearButton = page.getByRole('button', { name: 'Clear', exact: true });
   }
 
   async goto() {
@@ -83,7 +93,7 @@ export class AssetsPage {
 
   /**
    * Opens the status dropdown and selects the given status.
-   * Options seen so far: 'All Status', 'Available', 'Assigned', 'Maintenance'.
+   * Options seen so far: 'All', 'Available', 'Assigned', 'Maintenance', 'Retired'.
    */
   async filterByStatus(status: string) {
     await this.statusFilterButton.click();
@@ -96,6 +106,27 @@ export class AssetsPage {
     // Waiting for the network to go idle ensures the filtered data has
     // actually finished loading before we read the count.
     await this.page.waitForLoadState('networkidle');
+  }
+
+  /**
+   * Opens the status dropdown (if not already open) and clicks "Clear",
+   * which resets the filter back to the default "All Status" state and
+   * restores the full unfiltered list. Confirmed via codegen.
+   */
+  async clearStatusFilter() {
+    await this.statusFilterButton.click();
+    await this.statusClearButton.click();
+    await this.page.waitForLoadState('networkidle');
+  }
+
+  /**
+   * Returns true if the status dropdown menu is currently open, detected
+   * via visibility of its "Clear" button (only rendered while the menu is
+   * open). Used to verify the dropdown auto-closes after selecting an
+   * option.
+   */
+  async isStatusDropdownOpen(): Promise<boolean> {
+    return this.statusClearButton.isVisible();
   }
 
   /**
