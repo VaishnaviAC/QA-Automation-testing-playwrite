@@ -32,7 +32,9 @@ export default defineConfig({
     // Capture useful evidence
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    trace: 'retain-on-failure',
+
+    // Trace for PASS + FAIL test cases
+    trace: 'on',
 
     actionTimeout: 17000,
     navigationTimeout: 150000,
