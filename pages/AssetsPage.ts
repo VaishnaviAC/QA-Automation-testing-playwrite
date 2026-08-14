@@ -12,16 +12,33 @@ export class AssetsPage {
   // or the currently selected status like "Available").
   readonly statusFilterButton: Locator;
 
-  // The trigger button for the type dropdown (shows "All Types",
-  // or the currently selected type like "Laptop"). Located by its own
-  // label text rather than DOM position: unlike the Status dropdown,
-  // Type's wrapper did not reliably sit at the expected sibling position
-  // in the filter row, so a position-based locator (nth(1)) proved
-  // unreliable in practice. Text-based matching is safe here because the
-  // Type labels ('All Types', 'Laptop', 'Monitor', 'Keyboard', ...) never
-  // overlap with the Status labels ('All Status', 'Available', 'Assigned',
-  // 'Maintenance').
+  // The trigger button for the Type dropdown. Located the same way as
+  // statusFilterButton: by CSS class + position, using a direct-child
+  // combinator (div... > button).
+  //
+  // History: an earlier version anchored to "nearest preceding <button> of
+  // Import" via xpath, intended to survive the trigger's label changing to
+  // "N type(s) selected". That broke the moment the dropdown was OPEN:
+  // Apply/Clear render inside the dropdown panel, which sits in the DOM
+  // between the trigger and Import — so "nearest preceding button" matched
+  // Apply instead of the trigger (confirmed via a real test failure, where
+  // Apply's class was "text-xs text-primary", clearly not this trigger).
+  // The direct-child selector below avoids that: Apply/Clear live inside a
+  // nested dropdown-panel div, not as a *direct* child of the same
+  // `div.relative.min-w-[...]` wrapper as the trigger button, so this
+  // locator only ever matches the trigger itself — open or closed.
   readonly typeFilterButton: Locator;
+
+  // Confirms the in-progress Type selection. Distinct from statusClearButton
+  // below because Type is a multi-select with an explicit Apply step
+  // (Status applies immediately on option click, no Apply button).
+  readonly typeApplyButton: Locator;
+
+  // The Type dropdown's own "Clear" control. Shares the same accessible
+  // name ("Clear") as statusClearButton — kept as a separate named property
+  // per feature area for readability, and safe because only one dropdown
+  // (Status or Type) is ever open at a time.
+  readonly typeClearButton: Locator;
 
   // The text showing the current result count, e.g. "Assets: 1-12 of 79".
   // This is the key element we read from instead of clicking through
@@ -56,11 +73,13 @@ export class AssetsPage {
     // break as soon as a filter was applied.
     this.statusFilterButton = page.locator('div.relative.min-w-\\[120px\\] > button').first();
 
-    // Same reasoning as statusFilterButton in spirit, but matched by label
-    // text instead of position — see the property comment above for why.
-    this.typeFilterButton = page.getByRole('button', {
-      name: /^(All Types|Laptop|Monitor|Keyboard)$/,
-    });
+    // Direct-child combinator ("> button") is the key detail: it matches
+    // only a <button> that's an immediate child of the div.relative
+    // wrapper — i.e. the trigger itself — and never a button nested deeper
+    // inside the dropdown panel (Apply/Clear), regardless of whether the
+    // dropdown is currently open or closed. nth(1) selects the second such
+    // wrapper in the filter row (Status is nth(0)).
+    this.typeFilterButton = page.locator('div.relative.min-w-\\[120px\\] > button').nth(1);
 
     // A regex locator: matches any text starting with "Assets:" and
     // containing "of <number>", regardless of what the current page
@@ -81,6 +100,8 @@ export class AssetsPage {
     this.emptyStateSubtext = page.getByText('Try another filter or add your first asset.', { exact: true });
 
     this.statusClearButton = page.getByRole('button', { name: 'Clear', exact: true });
+    this.typeApplyButton = page.getByRole('button', { name: 'Apply', exact: true });
+    this.typeClearButton = page.getByRole('button', { name: 'Clear', exact: true });
   }
 
   async goto() {
@@ -129,20 +150,138 @@ export class AssetsPage {
     return this.statusClearButton.isVisible();
   }
 
+  // ---------------------------------------------------------------------
+  // Type Filter feature helpers
+  // ---------------------------------------------------------------------
+
+  /** Returns the <label> wrapping a given type's checkbox. Private helper —
+   * not exposed directly since callers should use selectType()/getSelectedTypes(). */
+  private typeCheckboxLabel(type: string): Locator {
+    return this.page.locator('label').filter({ hasText: type });
+  }
+
+  private typeCheckboxInput(type: string): Locator {
+    return this.typeCheckboxLabel(type).locator('input[type="checkbox"]');
+  }
+
+  /**
+   * Opens the Type dropdown if it isn't already open. Idempotent — safe to
+   * call even if the dropdown happens to already be open (detected via the
+   * Apply button's visibility, which only renders while open).
+   */
+  async openAllTypesDropdown() {
+    const alreadyOpen = await this.typeApplyButton.isVisible().catch(() => false);
+    if (!alreadyOpen) {
+      await this.typeFilterButton.click();
+    }
+  }
+
+  /** Toggles a single type's checkbox. Does NOT click Apply — combine with
+   * clickApply() or use filterByType()/filterByTypes() for the full flow. */
+  async selectType(type: string) {
+    await this.typeCheckboxLabel(type).click();
+  }
+
+  /** Toggles multiple checkboxes in sequence. Does NOT click Apply. */
+  async selectMultipleTypes(types: string[]) {
+    for (const type of types) {
+      await this.selectType(type);
+    }
+  }
+
+  /** Checks all six type checkboxes. Does NOT click Apply. Mirrors
+   * assetsData.ts's allTypeOptions — keep in sync if the UI adds a new type. */
+  async selectAllTypes() {
+    await this.selectMultipleTypes(['Laptop', 'Monitor', 'Mobile phone', 'Mouse', 'Keyboard', 'Other Peripheral']);
+  }
+
+  /** Confirms the current checkbox selection and waits for the filtered
+   * list to finish loading. */
+  async clickApply() {
+    await this.typeApplyButton.click();
+    await this.page.waitForLoadState('networkidle');
+  }
+
+  /** Clicks the Type dropdown's own "Clear" button (dropdown must already
+   * be open). Resets all checkboxes and the trigger label, but does NOT by
+   * itself commit the change to the table — combine with clickApply() for
+   * that (confirmed via codegen: Clear is always followed by an explicit
+   * Apply click). Distinct from clearStatusFilter(), which targets the
+   * Status dropdown's Clear and IS immediately committing (Status has no
+   * separate Apply step). */
+  async clickClear() {
+    await this.typeClearButton.click();
+  }
+
+  /** Returns the type labels whose checkboxes are currently checked
+   * (dropdown must be open). Used to verify selection state, e.g. after
+   * reopening the dropdown post-Apply. */
+  async getSelectedTypes(): Promise<string[]> {
+    const allTypes = ['Laptop', 'Monitor', 'Mobile phone', 'Mouse', 'Keyboard', 'Other Peripheral'];
+    const selected: string[] = [];
+
+    for (const type of allTypes) {
+      const isChecked = await this.typeCheckboxInput(type).isChecked().catch(() => false);
+      if (isChecked) {
+        selected.push(type);
+      }
+    }
+
+    return selected;
+  }
+
+  /** Asserts the currently checked types exactly match expectedTypes
+   * (order-independent). */
+  async verifySelectedTypes(expectedTypes: string[]) {
+    const selected = await this.getSelectedTypes();
+    expect([...selected].sort()).toEqual([...expectedTypes].sort());
+  }
+
+  /** Returns the Type column value (4th column: Code, Employee Name, Name,
+   * Type, ...) for every currently visible row. */
+  async getTableTypeValues(): Promise<string[]> {
+    const rows = await this.assetRows.all();
+    const values = await Promise.all(rows.map((row) => row.locator('td').nth(3).innerText()));
+    return values.map((v) => v.trim());
+  }
+
+  /** Asserts every visible row's Type column value is one of the given
+   * types — i.e. no unselected type leaked into the filtered results. */
+  async verifyTableContainsOnlyTypes(types: string[]) {
+    const values = await this.getTableTypeValues();
+    expect(values.length).toBeGreaterThan(0);
+    for (const value of values) {
+      expect(types).toContain(value);
+    }
+  }
+
+  /** Asserts the Type trigger button shows the given default label
+   * ("All Types"). Takes the expected value as a parameter rather than
+   * hardcoding it, so callers supply it from centralized test data. */
+  async verifyDefaultAllTypes(expectedLabel: string) {
+    await expect(this.typeFilterButton).toHaveText(expectedLabel);
+  }
+
+  /** Asserts the empty-state heading and subtext match exactly. Reusable
+   * across any feature (Search, Status, Type) whose filter combination can
+   * legitimately return zero results. */
+  async verifyEmptyStateMessage(expectedHeading: string, expectedSubtext: string) {
+    await expect(this.emptyStateHeading).toHaveText(expectedHeading);
+    await expect(this.emptyStateSubtext).toHaveText(expectedSubtext);
+  }
+
   /**
    * Opens the type dropdown, checks each given type's checkbox, then
    * confirms the selection via Apply — matches the real multi-select UI
    * confirmed via codegen/screenshot (Laptop + Monitor both checked, then
-   * Apply). Options seen so far: 'Laptop', 'Monitor', 'Mobile phone',
-   * 'Mouse', 'Keyboard', 'Other Peripheral'.
+   * Apply). Options: 'Laptop', 'Monitor', 'Mobile phone', 'Mouse',
+   * 'Keyboard', 'Other Peripheral'. Built on top of the granular helpers
+   * above so there's a single source of truth for the interaction.
    */
   async filterByTypes(assetTypes: string[]) {
-    await this.typeFilterButton.click();
-    for (const type of assetTypes) {
-      await this.page.locator('label').filter({ hasText: type }).click();
-    }
-    await this.page.getByRole('button', { name: 'Apply', exact: true }).click();
-    await this.page.waitForLoadState('networkidle');
+    await this.openAllTypesDropdown();
+    await this.selectMultipleTypes(assetTypes);
+    await this.clickApply();
   }
 
   /**

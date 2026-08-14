@@ -103,12 +103,43 @@ export const allStatusOptions = [
   statusOptions.retired,
 ];
 
-/** Type filter dropdown option labels, as seen in the UI. */
+/**
+ * Type filter dropdown option labels — the six checkboxes shown when the
+ * dropdown is open. NOTE: unlike Status, Type has no "All" checkbox option;
+ * the default "All Types" state is simply what shows when zero checkboxes
+ * are selected (see typeFilterDefaultLabel below).
+ */
 export const typeOptions = {
-  all: 'All Types',
   laptop: 'Laptop',
   monitor: 'Monitor',
+  mobilePhone: 'Mobile phone',
+  mouse: 'Mouse',
   keyboard: 'Keyboard',
+  otherPeripheral: 'Other Peripheral',
+};
+
+/**
+ * The type filter trigger button's default label, shown on initial page
+ * load and whenever zero checkboxes are selected (including after Clear).
+ */
+export const typeFilterDefaultLabel = 'All Types';
+
+/** All six selectable type options, in the order shown in the dropdown UI —
+ * used to iterate every type in data-driven tests (e.g. selectAllTypes,
+ * dropdown UI validation) instead of hardcoding each one per test case. */
+export const allTypeOptions = [
+  typeOptions.laptop,
+  typeOptions.monitor,
+  typeOptions.mobilePhone,
+  typeOptions.mouse,
+  typeOptions.keyboard,
+  typeOptions.otherPeripheral,
+];
+
+/** Reusable multi-select combination for the "multiple type filter" and
+ * "change an existing filter" scenarios. */
+export const typeCombinations = {
+  laptopAndMonitor: [typeOptions.laptop, typeOptions.monitor],
 };
 
 /** UI copy strings, used to assert the empty-state renders correctly. */

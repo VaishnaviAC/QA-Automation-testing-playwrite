@@ -10,6 +10,10 @@ import {
   combinedFilterScenario,
   statusFilterDefaultLabel,
   allStatusOptions,
+  typeOptions,
+  typeFilterDefaultLabel,
+  allTypeOptions,
+  typeCombinations,
 } from '../test-data/assetsData';
 
 // ---------------------------------------------------------------------------
@@ -551,6 +555,187 @@ test.describe('Assets Page - All Status Filter', () => {
     await page.waitForLoadState('networkidle');
 
     // "Assets: 1-N of Y" confirms the view is back on the first page.
+    await expect(assetsPage.totalCountText).toContainText('1-');
+  });
+
+  test('TC_STATUS_13 - empty-state message displays for a Search + Status combination with zero matches', async () => {
+    // Distinct from TC_STATUS_07 (which tests a status filter alone with no
+    // data): here, emptiness is driven by combining an impossible search
+    // term with a valid status filter — a different trigger path for the
+    // same message, exercised via the new reusable verifyEmptyStateMessage().
+    await assetsPage.search(invalidSearchTerms.nonExisting);
+    await assetsPage.filterByStatus(statusOptions.assigned);
+
+    await assetsPage.getVisibleRowCount();
+    await assetsPage.verifyEmptyStateMessage(uiText.emptyStateHeading, uiText.emptyStateSubtext);
+  });
+});
+
+// =============================================================================
+// Assets Page - "All Types" Dropdown Filter
+// =============================================================================
+//
+// Manual test cases covered (mapped 1:1 to automated tests below):
+//
+//   TC_TYPE_01 - Dropdown UI validation: trigger visible with default label
+//                "All Types"; opening it shows all 6 checkboxes plus Apply
+//                and Clear.
+//   TC_TYPE_02 - Clicking Apply with no checkboxes selected leaves the
+//                filter unchanged (still "All Types", full list intact).
+//   TC_TYPE_03 - Single type filter: table shows only the selected type.
+//   TC_TYPE_04 - Multiple type filter: table shows only the selected types,
+//                no unselected type leaks in.
+//   TC_TYPE_05 - Selecting all six types returns the same result as the
+//                unfiltered default (functionally equivalent to "All Types").
+//   TC_TYPE_06 - Closing the dropdown without clicking Apply leaves the
+//                filter and table unaffected.
+//   TC_TYPE_07 - Changing an already-applied filter (uncheck one, check a
+//                new one, Apply again) replaces the previous selection.
+//   TC_TYPE_08 - Clicking Clear resets all checkboxes and the trigger label,
+//                then a fresh type can be selected and applied.
+//   TC_TYPE_09 - Search + Type filter combination applies AND logic.
+//   TC_TYPE_10 - Reopening the dropdown after Apply shows the previously
+//                selected checkboxes still checked.
+//   TC_TYPE_11 - Applying a Type filter resets pagination back to page 1.
+//
+// (TC_TYPE_07 and TC_TYPE_08 are intentionally different *procedures* —
+// modifying an existing selection vs. explicitly clearing first — per the
+// two distinct edge cases requested, even though both end in "a different
+// type is now applied.")
+// =============================================================================
+
+test.describe('Assets Page - All Types Filter', () => {
+  test('TC_TYPE_01 - dropdown shows default label and all six type options with Apply/Clear', async () => {
+    await assetsPage.verifyDefaultAllTypes(typeFilterDefaultLabel);
+
+    await assetsPage.openAllTypesDropdown();
+    for (const type of allTypeOptions) {
+      await expect(assetsPage.page.locator('label').filter({ hasText: type })).toBeVisible();
+    }
+    await expect(assetsPage.typeApplyButton).toBeVisible();
+    await expect(assetsPage.typeClearButton).toBeVisible();
+  });
+
+  test('TC_TYPE_02 - clicking Apply with no checkboxes selected leaves the list unfiltered', async () => {
+    const baselineTotal = await assetsPage.getTotalCount();
+
+    await assetsPage.openAllTypesDropdown();
+    await assetsPage.clickApply();
+
+    await assetsPage.verifyDefaultAllTypes(typeFilterDefaultLabel);
+    const totalAfterApply = await assetsPage.getTotalCount();
+    expect(totalAfterApply).toBe(baselineTotal);
+  });
+
+  test('TC_TYPE_03 - single type filter shows only that type in every row', async () => {
+    await assetsPage.filterByType(typeOptions.laptop);
+    await assetsPage.getVisibleRowCount();
+    await assetsPage.verifyTableContainsOnlyTypes([typeOptions.laptop]);
+  });
+
+  test('TC_TYPE_04 - multiple type filter shows only the selected types, none other', async () => {
+    await assetsPage.filterByTypes(typeCombinations.laptopAndMonitor);
+    await assetsPage.getVisibleRowCount();
+    await assetsPage.verifyTableContainsOnlyTypes(typeCombinations.laptopAndMonitor);
+  });
+
+  test('TC_TYPE_05 - selecting all six types returns the same result as the unfiltered default', async () => {
+    const baselineTotal = await assetsPage.getTotalCount();
+
+    await assetsPage.openAllTypesDropdown();
+    await assetsPage.selectAllTypes();
+    await assetsPage.clickApply();
+
+    const totalAfterSelectAll = await assetsPage.getTotalCount();
+    expect(totalAfterSelectAll).toBe(baselineTotal);
+  });
+
+  test('TC_TYPE_06 - closing the dropdown without Apply leaves the filter and table unaffected', async () => {
+    const baselineTotal = await assetsPage.getTotalCount();
+
+    await assetsPage.openAllTypesDropdown();
+    await assetsPage.selectType(typeOptions.keyboard);
+    await assetsPage.heading.click(); // click outside the dropdown to close it without applying
+
+    await assetsPage.verifyDefaultAllTypes(typeFilterDefaultLabel);
+    const totalAfterClose = await assetsPage.getTotalCount();
+    expect(totalAfterClose).toBe(baselineTotal);
+  });
+
+  test('TC_TYPE_07 - changing an already-applied filter replaces the previous selection', async () => {
+    await assetsPage.filterByType(typeOptions.laptop);
+    await assetsPage.getVisibleRowCount();
+    await assetsPage.verifyTableContainsOnlyTypes([typeOptions.laptop]);
+
+    // Modify the existing selection: uncheck Laptop, check Keyboard, re-apply.
+    await assetsPage.openAllTypesDropdown();
+    await assetsPage.selectType(typeOptions.laptop); // toggles off
+    await assetsPage.selectType(typeOptions.keyboard); // toggles on
+    await assetsPage.clickApply();
+
+    const rowCount = await assetsPage.getVisibleRowCount();
+    if (rowCount > 0) {
+      await assetsPage.verifyTableContainsOnlyTypes([typeOptions.keyboard]);
+    } else {
+      await expect(assetsPage.emptyStateHeading).toBeVisible();
+    }
+  });
+
+  test('TC_TYPE_08 - Clear resets checkboxes, then a new type can be selected and applied', async () => {
+    await assetsPage.filterByType(typeOptions.monitor);
+    await assetsPage.getVisibleRowCount();
+
+    await assetsPage.openAllTypesDropdown();
+    await assetsPage.clickClear();
+
+    // Clear only unchecks the in-progress checkboxes — it does NOT commit
+    // the change by itself. The trigger label and table stay exactly as
+    // they were (still reflecting the previously applied "Monitor" filter)
+    // until Apply is explicitly clicked. Confirmed against real app
+    // behavior — Clear is a "reset the form" action, not a "reset the
+    // filter" action.
+    await assetsPage.verifySelectedTypes([]);
+
+    await assetsPage.clickApply();
+    await assetsPage.verifyDefaultAllTypes(typeFilterDefaultLabel);
+
+    await assetsPage.filterByType(typeOptions.mouse);
+    const rowCount = await assetsPage.getVisibleRowCount();
+    if (rowCount > 0) {
+      await assetsPage.verifyTableContainsOnlyTypes([typeOptions.mouse]);
+    } else {
+      await expect(assetsPage.emptyStateHeading).toBeVisible();
+    }
+  });
+
+  test('TC_TYPE_09 - Search combined with Type filter applies AND logic', async () => {
+    await assetsPage.searchAndSubmit(knownAssets.byName.partialToken);
+    await assetsPage.filterByType(typeOptions.laptop);
+
+    const rowCount = await assetsPage.getVisibleRowCount();
+    if (rowCount > 0) {
+      const rowTexts = await assetsPage.getRowTexts();
+      for (const text of rowTexts) {
+        expect(text.toLowerCase()).toContain(knownAssets.byName.partialToken.toLowerCase());
+      }
+      await assetsPage.verifyTableContainsOnlyTypes([typeOptions.laptop]);
+    } else {
+      await expect(assetsPage.emptyStateHeading).toBeVisible();
+    }
+  });
+
+  test('TC_TYPE_10 - reopening the dropdown after Apply shows the previously selected checkboxes', async () => {
+    await assetsPage.filterByTypes(typeCombinations.laptopAndMonitor);
+    await assetsPage.getVisibleRowCount();
+
+    await assetsPage.openAllTypesDropdown();
+    await assetsPage.verifySelectedTypes(typeCombinations.laptopAndMonitor);
+  });
+
+  test('TC_TYPE_11 - applying a Type filter resets pagination back to page 1', async () => {
+    await assetsPage.filterByType(typeOptions.laptop);
+    await assetsPage.getVisibleRowCount();
+
     await expect(assetsPage.totalCountText).toContainText('1-');
   });
 });
