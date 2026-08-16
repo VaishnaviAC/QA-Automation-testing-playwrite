@@ -14,6 +14,8 @@ import {
   typeFilterDefaultLabel,
   allTypeOptions,
   typeCombinations,
+  importFixtures,
+  importModalText,
 } from '../test-data/assetsData';
 
 // ---------------------------------------------------------------------------
@@ -737,5 +739,178 @@ test.describe('Assets Page - All Types Filter', () => {
     await assetsPage.getVisibleRowCount();
 
     await expect(assetsPage.totalCountText).toContainText('1-');
+  });
+});
+
+// =============================================================================
+// Assets Page - Import Assets Modal
+// =============================================================================
+//
+// Fixture files used below (see test-data/assetsData.ts -> importFixtures):
+//   - malformed-data.xlsx : valid .xlsx, but with headers that don't match
+//     any expected type-prefixed column (e.g. "LaptopName"). Originally
+//     intended to trigger a server-side "Import failed", but a real test
+//     run proved the app validates headers CLIENT-SIDE first — this fixture
+//     fails that check and Upload never becomes enabled (see TC_IMPORT_05/10
+//     skip notes below).
+//   - empty-file.xlsx     : a completely blank workbook (no headers, no rows).
+//   - invalid-format.txt  : not a spreadsheet at all, for extension rejection.
+// Place a `fixtures/` folder at the project root (sibling of tests/,
+// pages/, test-data/) containing these three files.
+//
+// NOT AUTOMATED — intentionally excluded or currently skipped:
+//   - "Successful import creates new asset rows." Automating this needs a
+//     .xlsx that exactly matches the app's real expected schema (the modal
+//     hints at per-type prefixed columns like LaptopName/LaptopBrand, but the
+//     full column set for every asset type isn't known).
+//   - TC_IMPORT_05 and TC_IMPORT_10 are currently test.skip()'d for the same
+//     reason: both need a fixture that passes the app's confirmed client-side
+//     header validation but fails server-side, which requires knowing the
+//     real schema. Once you can share the actual downloaded template's
+//     column headers (or a known-good sample file), these are straightforward
+//     to un-skip and fix (and to add a genuine "successful import" test as
+//     TC_IMPORT_11).
+//
+// Manual test cases covered (mapped 1:1 to automated tests below):
+//   TC_IMPORT_01 - Import modal opens with correct heading and instructional text.
+//   TC_IMPORT_02 - "Download Template" triggers a .xlsx file download.
+//   TC_IMPORT_03 - The file-select drop-zone and its "Only .xlsx files are
+//                  accepted" hint are visible.
+//   TC_IMPORT_04 - Selecting a non-.xlsx file does not enable a successful upload.
+//   TC_IMPORT_05 - [SKIPPED, pending real schema] Uploading a .xlsx with an
+//                  unrecognized column schema shows "Import failed".
+//   TC_IMPORT_06 - Uploading a completely empty .xlsx is handled gracefully
+//                  (no crash, no false success).
+//   TC_IMPORT_07 - Clicking "Upload" with no file selected does not crash or
+//                  falsely succeed.
+//   TC_IMPORT_08 - "Cancel" closes the modal without applying any changes.
+//   TC_IMPORT_09 - Reopening the modal after Cancel resets to a clean default
+//                  state (no leftover selected file).
+//   TC_IMPORT_10 - [SKIPPED, pending real schema] The asset table's total
+//                  count is unchanged after a failed import.
+// =============================================================================
+
+test.describe('Assets Page - Import Assets', () => {
+  test('TC_IMPORT_01 - Import modal opens with correct heading and instructional text', async () => {
+    await assetsPage.openImportModal();
+
+    await expect(assetsPage.importModalHeading).toBeVisible();
+    await expect(assetsPage.downloadTemplateButton).toBeVisible();
+    await expect(assetsPage.importFileSelectArea).toBeVisible();
+    await expect(assetsPage.page.getByText(importModalText.fileTypeHint)).toBeVisible();
+    await expect(assetsPage.importUploadButton).toBeVisible();
+    await expect(assetsPage.importCancelButton).toBeVisible();
+  });
+
+  test('TC_IMPORT_02 - "Download Template" triggers a .xlsx file download', async () => {
+    await assetsPage.openImportModal();
+
+    const download = await assetsPage.downloadTemplate();
+    expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
+  });
+
+  test('TC_IMPORT_03 - file-select drop-zone and .xlsx-only hint are visible', async () => {
+    await assetsPage.openImportModal();
+
+    await expect(assetsPage.importFileSelectArea).toBeVisible();
+    await expect(assetsPage.page.getByText(importModalText.fileTypeHint)).toBeVisible();
+  });
+
+  test('TC_IMPORT_04 - selecting a non-.xlsx file does not enable a successful upload', async () => {
+    await assetsPage.openImportModal();
+    await assetsPage.selectFileForImport(importFixtures.wrongExtension);
+
+    // The app must not allow a non-.xlsx file to proceed to Upload at all.
+    await expect(assetsPage.importUploadButton).toBeDisabled();
+  });
+
+  test('TC_IMPORT_05 - uploading a .xlsx with an unrecognized column schema shows "Import failed"', async () => {
+    test.skip(
+      true,
+      'Confirmed via test run: the app validates .xlsx column headers ' +
+      "client-side before enabling Upload, so a fixture with arbitrary/wrong " +
+      'headers never reaches the server-side "Import failed" state this test ' +
+      'needs. Requires the real template schema to build a fixture that ' +
+      'passes header validation but fails on data content — see chat for options.',
+    );
+
+    await assetsPage.openImportModal();
+    await assetsPage.selectFileForImport(importFixtures.malformedData);
+
+    await expect(assetsPage.importUploadButton).toBeEnabled();
+    await assetsPage.clickUpload();
+
+    await expect(assetsPage.importFailedMessage).toBeVisible();
+  });
+
+  test('TC_IMPORT_06 - uploading a completely empty .xlsx is handled gracefully', async () => {
+    await assetsPage.openImportModal();
+    await assetsPage.selectFileForImport(importFixtures.empty);
+
+    // A file with zero headers/rows may legitimately be blocked at
+    // selection time (a distinct "no data in this file" check) rather than
+    // reaching the server — so branch on the actual state instead of
+    // assuming one outcome.
+    const uploadEnabled = await assetsPage.importUploadButton.isEnabled();
+
+    if (uploadEnabled) {
+      await assetsPage.clickUpload();
+      await expect(assetsPage.importFailedMessage).toBeVisible();
+    } else {
+      await expect(assetsPage.importUploadButton).toBeDisabled();
+    }
+  });
+
+  test('TC_IMPORT_07 - clicking Upload with no file selected does not crash or falsely succeed', async ({ page }) => {
+    await assetsPage.openImportModal();
+
+    // No file was ever provided — Upload should be disabled, not clickable.
+    await expect(assetsPage.importUploadButton).toBeDisabled();
+    // Page must still be responsive — a real crash would leave the app in
+    // a broken state where basic navigation elements are gone.
+    await expect(page.getByRole('link', { name: 'Assets' })).toBeVisible();
+  });
+
+  test('TC_IMPORT_08 - "Cancel" closes the modal without applying any changes', async () => {
+    const baselineTotal = await assetsPage.getTotalCount();
+
+    await assetsPage.openImportModal();
+    await assetsPage.cancelImport();
+
+    await expect(assetsPage.importModalHeading).not.toBeVisible();
+    const totalAfterCancel = await assetsPage.getTotalCount();
+    expect(totalAfterCancel).toBe(baselineTotal);
+  });
+
+  test('TC_IMPORT_09 - reopening the modal after Cancel resets to a clean default state', async () => {
+    await assetsPage.openImportModal();
+    await assetsPage.selectFileForImport(importFixtures.malformedData);
+    await assetsPage.cancelImport();
+
+    await assetsPage.openImportModal();
+    // Default drop-zone prompt should be showing again — not a leftover
+    // "selected file" state from before Cancel.
+    await expect(assetsPage.importFileSelectArea).toBeVisible();
+  });
+
+  test('TC_IMPORT_10 - asset table total count is unchanged after a failed import', async () => {
+    test.skip(
+      true,
+      'Same root cause as TC_IMPORT_05: needs a fixture that reaches the ' +
+      'server-side "Import failed" state, which requires the real template ' +
+      'schema. See TC_IMPORT_05 for details.',
+    );
+
+    const baselineTotal = await assetsPage.getTotalCount();
+
+    await assetsPage.openImportModal();
+    await assetsPage.selectFileForImport(importFixtures.malformedData);
+    await expect(assetsPage.importUploadButton).toBeEnabled();
+    await assetsPage.clickUpload();
+    await expect(assetsPage.importFailedMessage).toBeVisible();
+    await assetsPage.cancelImport();
+
+    const totalAfterFailedImport = await assetsPage.getTotalCount();
+    expect(totalAfterFailedImport).toBe(baselineTotal);
   });
 });

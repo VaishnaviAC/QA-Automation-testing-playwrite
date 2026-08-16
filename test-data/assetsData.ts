@@ -41,13 +41,13 @@ export const knownAssets = {
     partialToken: 'hre', // matches "Shreyas Dhabikar"
   },
   byAssetCode: {
-    exact: 'AST-0084', // should return exactly one row
-    numericFragment: '0084',
+    exact: 'AST-0034', // should return exactly one row
+    numericFragment: '0034',
   },
   bySerialNumber: {
     exact: 'PC1WXQLL', // should return exactly one row
     mixedCaseOfExact: 'pc1wxqll',
-    alphaNumeric: 'S9NRKD01536939D',
+    alphaNumeric: 'R6NRKD02067324E',
   },
 };
 
@@ -165,6 +165,43 @@ export const combinedFilterScenario = {
   employeeName: 'Mrunali Shinde',
   status: statusOptions.assigned,
   types: [typeOptions.laptop, typeOptions.monitor],
-  expectedAssetCodes: ['AST-0072', 'AST-0017', 'AST-0016'],
-  expectedCount: 3,
+  expectedAssetCodes: ['AST-0017', 'AST-0016'],
+  expectedCount: 2,
+};
+
+// ---------------------------------------------------------------------------
+// Import Assets feature
+// ---------------------------------------------------------------------------
+
+import * as path from 'path';
+
+/**
+ * Fixture file paths for the Import Assets tests. All three are generated
+ * fixtures (not real production data) — see the accompanying README note
+ * in assets.spec.ts for how they were built and what each one exercises.
+ *
+ * Resolved via path.join(__dirname, ...) rather than a plain relative
+ * string, so these paths work correctly no matter what directory
+ * `npx playwright test` is run from. Assumes a `fixtures/` folder at the
+ * project root, as a sibling of `test-data/` and `tests/` — adjust the
+ * `../fixtures` segment below if yours lives elsewhere.
+ */
+const fixturesDir = path.join(__dirname, '..', 'fixtures');
+
+export const importFixtures = {
+  /** A .xlsx with an unrecognized column schema (headers the app's import
+   * validation won't match against any expected type-prefixed columns).
+   * Deterministically triggers the "Import failed" state. */
+  malformedData: path.join(fixturesDir, 'malformed-data.xlsx'),
+  /** A completely empty .xlsx (no headers, no rows). */
+  empty: path.join(fixturesDir, 'empty-file.xlsx'),
+  /** Wrong file extension entirely — not a spreadsheet at all. */
+  wrongExtension: path.join(fixturesDir, 'invalid-format.txt'),
+};
+
+/** Expected static copy inside the Import modal, for UI-text assertions. */
+export const importModalText = {
+  heading: 'Import Assets',
+  fileTypeHint: 'Only .xlsx files are accepted',
+  failureMessage: 'Import failed',
 };

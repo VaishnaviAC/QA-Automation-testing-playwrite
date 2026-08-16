@@ -19,7 +19,7 @@ export default defineConfig({
   },
 
   use: {
-    baseURL: 'http://192.168.10.63:4030',
+    baseURL: 'http://192.168.10.45:4030',
 
     // Show browser
     headless: false,

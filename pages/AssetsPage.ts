@@ -60,6 +60,16 @@ export class AssetsPage {
   // dropdown is open — the two never coexist in practice.
   readonly statusClearButton: Locator;
 
+  // --- Import Assets modal ---
+  readonly importButton: Locator;
+  readonly importModalHeading: Locator;
+  readonly downloadTemplateButton: Locator;
+  readonly importFileSelectArea: Locator;
+  readonly importFileInput: Locator;
+  readonly importUploadButton: Locator;
+  readonly importCancelButton: Locator;
+  readonly importFailedMessage: Locator;
+
   constructor(page: Page) {
     this.page = page;
 
@@ -102,6 +112,24 @@ export class AssetsPage {
     this.statusClearButton = page.getByRole('button', { name: 'Clear', exact: true });
     this.typeApplyButton = page.getByRole('button', { name: 'Apply', exact: true });
     this.typeClearButton = page.getByRole('button', { name: 'Clear', exact: true });
+
+    // --- Import Assets modal ---
+    this.importButton = page.getByRole('button', { name: 'Import', exact: true });
+    this.importModalHeading = page.getByRole('heading', { name: 'Import Assets', exact: true });
+    this.downloadTemplateButton = page.getByRole('button', { name: 'Download Template', exact: true });
+    // The clickable drop-zone's accessible name includes both the primary
+    // label and its subtext in one string (confirmed via codegen), so this
+    // matches on a stable substring rather than the full concatenated text.
+    this.importFileSelectArea = page.getByRole('button', { name: /Click to select file/ });
+    // The actual <input type="file"> is visually hidden behind the
+    // drop-zone button above; Playwright's setInputFiles() can target it
+    // directly regardless of visibility.
+    this.importFileInput = page.locator('input[type="file"]');
+    this.importUploadButton = page.getByRole('button', { name: 'Upload', exact: true });
+    this.importCancelButton = page.getByRole('button', { name: 'Cancel', exact: true });
+    // Non-exact: the app may append extra detail after "Import failed"
+    // (e.g. a reason), so this matches the stable leading substring.
+    this.importFailedMessage = page.getByText('Import failed');
   }
 
   async goto() {
@@ -414,5 +442,56 @@ export class AssetsPage {
     for (const text of rowTexts) {
       expect(text.toLowerCase()).toContain(term.toLowerCase());
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Import Assets feature helpers
+  // ---------------------------------------------------------------------
+
+  /** Opens the Import modal and waits for it to render. */
+  async openImportModal() {
+    await this.importButton.click();
+    await expect(this.importModalHeading).toBeVisible();
+  }
+
+  /**
+   * Clicks "Download Template" and returns the resulting Download object.
+   * Caller decides what to assert about it (filename, save path, etc.).
+   */
+  async downloadTemplate() {
+    const downloadPromise = this.page.waitForEvent('download');
+    await this.downloadTemplateButton.click();
+    return downloadPromise;
+  }
+
+  /**
+   * Selects a file for import by setting it directly on the underlying
+   * hidden <input type="file">.
+   *
+   * IMPORTANT: does NOT click the visible "Click to select file" drop-zone
+   * first. An earlier version did, to mirror real user interaction — but
+   * that click can trigger the browser's real native file-chooser dialog,
+   * which races with the programmatic setInputFiles() call and leaves the
+   * app's "file selected" state never properly updated (observed as Upload
+   * staying permanently disabled — a 17s timeout, not a real app bug).
+   * Targeting the hidden input directly is Playwright's own recommended
+   * pattern for file inputs and avoids that race entirely.
+   */
+  async selectFileForImport(filePath: string) {
+    await this.importFileInput.setInputFiles(filePath);
+  }
+
+  /** Clicks Upload. Callers should confirm the button is enabled first
+   * (e.g. via `expect(assetsPage.importUploadButton).toBeEnabled()`) for a
+   * fast, clear failure instead of a long actionability-timeout if a file
+   * selection didn't take effect as expected. */
+  async clickUpload() {
+    await this.importUploadButton.click();
+  }
+
+  /** Closes the Import modal via Cancel, discarding any selected file. */
+  async cancelImport() {
+    await this.importCancelButton.click();
+    await expect(this.importModalHeading).not.toBeVisible();
   }
 }
