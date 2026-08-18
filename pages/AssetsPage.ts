@@ -96,6 +96,29 @@ export class AssetsPage {
   // know that *some* error appeared, not its exact copy.
   readonly assetFormValidationError: Locator;
 
+  // --- Recycle Bin modal ---
+  readonly recycleBinButton: Locator;
+  readonly recycleBinHeading: Locator;
+  readonly recycleBinDialog: Locator;
+  // Data rows only, matched by the presence of a "Restore" button inside
+  // them — this naturally excludes any empty-state placeholder row
+  // without needing to know that row's exact copy (mirrors the approach
+  // used for assetRows above, which excludes by known text instead).
+  readonly recycleBinRows: Locator;
+  readonly recycleBinToast: Locator;
+  // The nested "Delete Permanently" confirmation dialog, isolated by its
+  // own heading so it's never confused with the outer Recycle Bin dialog
+  // even while both are simultaneously in the DOM.
+  readonly confirmDeleteDialog: Locator;
+  readonly confirmDeleteDialogHeading: Locator;
+  readonly confirmDeleteWarningText: Locator;
+  readonly confirmDeleteCancelButton: Locator;
+  // NOTE: confirmed via codegen — the row-level action button is labeled
+  // "Permanent Delete" (Title Case), but the actual confirm button inside
+  // the dialog is labeled "Delete permanently" (lowercase 'p'). Two
+  // distinct strings, not a typo in this file.
+  readonly confirmDeletePermanentlyButton: Locator;
+
   constructor(page: Page) {
     this.page = page;
 
@@ -243,6 +266,31 @@ export class AssetsPage {
     this.assetFormValidationError = page
       .locator('#asset-form')
       .locator('[role="alert"], .text-red-500, .text-destructive, .error');
+
+    // --- Recycle Bin modal ---
+    this.recycleBinButton = page.getByRole('button', { name: 'Recycle Bin', exact: true });
+    this.recycleBinHeading = page.getByRole('heading', { name: 'Recycle Bin', exact: true });
+    // Isolated by `.filter({ has: heading })` rather than a bare
+    // `getByRole('dialog')`, since the nested "Delete Permanently" dialog
+    // is also role="dialog" and can be open at the same time.
+    this.recycleBinDialog = page.getByRole('dialog').filter({ has: this.recycleBinHeading });
+    this.recycleBinRows = this.recycleBinDialog
+      .locator('table tbody tr')
+      .filter({ has: page.getByRole('button', { name: 'Restore', exact: true }) });
+    // Generic toast/status region.
+    // Matches ALL currently-visible toasts, since the app can stack
+    // several at once (confirmed via a real test run) — expectToast()
+    // below filters this down to the specific one being asserted on.
+    this.recycleBinToast = page.getByRole('status');
+
+    this.confirmDeleteDialogHeading = page.getByRole('heading', { name: 'Delete Permanently', exact: true });
+    this.confirmDeleteDialog = page.getByRole('dialog').filter({ has: this.confirmDeleteDialogHeading });
+    this.confirmDeleteWarningText = page.getByText(/permanently remove/i);
+    this.confirmDeleteCancelButton = this.confirmDeleteDialog.getByRole('button', { name: 'Cancel', exact: true });
+    this.confirmDeletePermanentlyButton = this.confirmDeleteDialog.getByRole('button', {
+      name: 'Delete permanently',
+      exact: true,
+    });
   }
 
   /**
@@ -750,5 +798,128 @@ export class AssetsPage {
    */
   async waitForAddAssetModalToClose() {
     await expect(this.addAssetHeading).not.toBeVisible({ timeout: 10000 });
+  }
+
+  // ---------------------------------------------------------------------
+  // Row delete (soft delete) — Assets table Action column
+  // ---------------------------------------------------------------------
+
+  /**
+   * Soft-deletes an asset from the main Assets table via its row's delete
+   * (trash) icon, moving it to the Recycle Bin.
+   *
+   * NOTE ON LOCATOR STRATEGY: the Action column's icon buttons (view/
+   * edit/delete, confirmed via screenshot) render icon-only, with no
+   * visible text — so this first tries an accessible name of "Delete"
+   * (in case the app labels it for a11y), and falls back to position (the
+   * 3rd icon button in the row, matching the view→edit→delete order seen
+   * in the screenshot) if no such name exists. If the real app instead
+   * confirms the soft-delete with a dialog (distinct from the Recycle
+   * Bin's own "Delete Permanently" dialog), this confirms it too; if the
+   * app deletes immediately with no confirmation, that check is a no-op.
+   */
+  async softDeleteAssetRow(row: Locator) {
+    const byName = row.getByRole('button', { name: /delete/i });
+    const deleteButton = (await byName.count()) > 0 ? byName.first() : row.getByRole('button').nth(2);
+    await deleteButton.click();
+
+    const possibleConfirm = this.page.getByRole('button', { name: /^delete$/i });
+    if (await possibleConfirm.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await possibleConfirm.click();
+    }
+  }
+
+  /** Searches for the given Serial Number and soft-deletes the single
+   * matching row. Assumes the search returns exactly one row (true for
+   * any unique Serial Number, per the app's own uniqueness rule). */
+  async deleteAssetBySerialNumber(serialNumber: string) {
+    await this.search(serialNumber);
+    await this.softDeleteAssetRow(this.assetRows.first());
+  }
+
+  // ---------------------------------------------------------------------
+  // Recycle Bin feature helpers
+  // ---------------------------------------------------------------------
+
+  /** Opens the Recycle Bin modal and waits for its heading to render. */
+  async openRecycleBin() {
+    await this.recycleBinButton.click();
+    await expect(this.recycleBinHeading).toBeVisible();
+  }
+
+  /** Closes the Recycle Bin modal. Confirmed via codegen: the modal is
+   * dismissed by clicking its backdrop overlay (`.absolute.inset-0`)
+   * rather than a dedicated close/X button — falls back to Escape if
+   * that overlay isn't present, since a CSS-class-based click-outside is
+   * inherently more fragile than a semantic close control. */
+  async closeRecycleBin() {
+    const overlay = this.page.locator('.absolute.inset-0');
+    if (await overlay.isVisible().catch(() => false)) {
+      await overlay.click({ position: { x: 5, y: 5 } });
+    } else {
+      await this.page.keyboard.press('Escape');
+    }
+    await expect(this.recycleBinHeading).not.toBeVisible();
+  }
+
+  /** Returns the number of deleted-asset rows currently shown in the
+   * Recycle Bin. */
+  async getRecycleBinRowCount(): Promise<number> {
+    return this.recycleBinRows.count();
+  }
+
+  /** Returns the trimmed text of every currently visible Recycle Bin row
+   * — used to confirm a specific asset (by Name/Serial Number) is, or
+   * is no longer, present. */
+  async getRecycleBinRowTexts(): Promise<string[]> {
+    const rows = await this.recycleBinRows.all();
+    const texts = await Promise.all(rows.map((row) => row.innerText()));
+    return texts.map((t) => t.trim());
+  }
+
+  /** Finds the Recycle Bin row containing the given text (Name or Serial
+   * Number) and clicks its Restore button. */
+  async restoreAssetByText(identifyingText: string) {
+    const row = this.recycleBinRows.filter({ hasText: identifyingText }).first();
+    await row.getByRole('button', { name: 'Restore', exact: true }).click();
+  }
+
+  /** Finds the Recycle Bin row containing the given text and clicks its
+   * "Permanent Delete" action, opening the confirmation dialog. */
+  async openPermanentDeleteConfirmByText(identifyingText: string) {
+    const row = this.recycleBinRows.filter({ hasText: identifyingText }).first();
+    await row.getByRole('button', { name: 'Permanent Delete', exact: true }).click();
+    await expect(this.confirmDeleteDialogHeading).toBeVisible();
+  }
+
+  /** Confirms the permanent deletion in the already-open confirmation
+   * dialog. Call openPermanentDeleteConfirmByText() first. */
+  async confirmPermanentDelete() {
+    await this.confirmDeletePermanentlyButton.click();
+    await expect(this.confirmDeleteDialogHeading).not.toBeVisible();
+  }
+
+  /** Cancels the permanent deletion in the already-open confirmation
+   * dialog, returning to the Recycle Bin modal with the asset intact. */
+  async cancelPermanentDelete() {
+    await this.confirmDeleteCancelButton.click();
+    await expect(this.confirmDeleteDialogHeading).not.toBeVisible();
+    await expect(this.recycleBinHeading).toBeVisible();
+  }
+
+  /**
+   * Asserts a toast/status message matching the given pattern is visible.
+   *
+   * NOTE: confirmed via a real test run — the app stacks multiple toasts
+   * at once (e.g. "Asset created...", "Asset moved to Recycle Bin...",
+   * "Asset restored successfully" can all be on screen simultaneously),
+   * so `recycleBinToast` (getByRole('status')) alone matches several
+   * elements and violates Playwright's strict mode. Filtering by the
+   * given pattern narrows it down to the one toast this call actually
+   * cares about.
+   */
+  async expectToast(pattern: RegExp) {
+    const toast = this.recycleBinToast.filter({ hasText: pattern }).first();
+    await expect(toast).toBeVisible();
   }
 }

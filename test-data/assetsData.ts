@@ -337,3 +337,27 @@ export const laptopInvalidData = {
 export const laptopFormBoundaryValues = {
   veryLongName: 'B'.repeat(150),
 };
+
+// ---------------------------------------------------------------------------
+// Recycle Bin feature
+// ---------------------------------------------------------------------------
+
+/** Expected static copy in the Recycle Bin's confirmation dialog, per the
+ * manual test data doc. */
+export const recycleBinText = {
+  heading: 'Recycle Bin',
+  confirmDeleteHeading: 'Delete Permanently',
+  confirmDeleteWarning:
+    'This will permanently remove the asset from the database. This action cannot be undone.',
+};
+
+/** Loose (keyword) patterns for the toast messages shown after a Restore
+ * or Permanent Delete action. Confirmed via a real test run — the app's
+ * exact toast copy is "Asset restored successfully" and "Asset
+ * Permanently Deleted" (plus "Asset created..." and "Asset moved to
+ * Recycle Bin..." from earlier steps, which these patterns must NOT
+ * match, since several toasts can be stacked on screen at once). */
+export const recycleBinToastPatterns = {
+  restored: /Asset restored successfully/i,
+  permanentlyDeleted: /Asset Permanently Deleted/i,
+};

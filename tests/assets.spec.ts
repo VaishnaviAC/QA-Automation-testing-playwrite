@@ -27,6 +27,8 @@ import {
   buildValidLaptopFormData,
   laptopInvalidData,
   laptopFormBoundaryValues,
+  recycleBinText,
+  recycleBinToastPatterns,
 } from '../test-data/assetsData';
 
 // ---------------------------------------------------------------------------
@@ -1514,5 +1516,355 @@ test.describe('Assets Page - Add Asset (Laptop)', () => {
     // responsive rather than crashing.
     await assetsPage.page.waitForTimeout(1000);
     await expect(assetsPage.page.getByRole('link', { name: 'Assets' })).toBeVisible();
+  });
+});
+
+// =============================================================================
+// Assets Page - Recycle Bin
+// =============================================================================
+//
+// MANUAL TEST CASES (source: uploaded manual test case sheet, TC_RB_001–
+// TC_RB_025 — titles kept verbatim; automated 1:1 below):
+//
+//   TC_RB_001 - Open Recycle Bin.
+//   TC_RB_002 - Display deleted assets in Recycle Bin.
+//   TC_RB_003 - Display actions for deleted asset (Restore + Delete).
+//   TC_RB_004 - Restore a deleted asset.
+//   TC_RB_005 - Display restore success message.
+//   TC_RB_006 - Remove restored asset from Recycle Bin.
+//   TC_RB_007 - Verify restored asset in Assets list.
+//   TC_RB_008 - Open permanent delete confirmation dialog.
+//   TC_RB_009 - Verify permanent deletion warning message.
+//   TC_RB_010 - Verify Cancel button in delete dialog (and Delete
+//               Permanently button).
+//   TC_RB_011 - Cancel permanent deletion.
+//   TC_RB_012 - Verify asset remains after cancellation.
+//   TC_RB_013 - Permanently delete an asset.
+//   TC_RB_014 - Display permanent deletion success message.
+//   TC_RB_015 - Verify permanently deleted asset is removed (from Recycle
+//               Bin).
+//   TC_RB_016 - Verify permanently deleted asset cannot be restored.
+//   TC_RB_017 - Restore multiple deleted assets.
+//   TC_RB_018 - Permanently delete multiple deleted assets.
+//   TC_RB_019 - Verify remaining assets after partial actions (one
+//               restored, one permanently deleted).
+//   TC_RB_020 - Verify empty Recycle Bin state. SKIPPED in this shared/
+//               seeded environment — the app instance under test may
+//               already contain deleted assets from other suites or
+//               people, and there's no safe, non-destructive way to
+//               empty it just to observe the empty-state copy. Automate
+//               once a dedicated/isolated environment (or an API-level
+//               reset hook) is available.
+//   TC_RB_021 - Verify Recycle Bin data after reopening (close/reopen the
+//               modal).
+//   TC_RB_022 - Verify restored asset after reopening Assets page.
+//   TC_RB_023 - Verify permanent deletion persists after reopening
+//               Recycle Bin.
+//   TC_RB_024 - Verify correct asset is restored (not another one).
+//   TC_RB_025 - Verify correct asset is permanently deleted (not another
+//               one).
+// =============================================================================
+
+/**
+ * Creates a fresh, uniquely-named Laptop asset and immediately soft-deletes
+ * it, so each Recycle Bin test gets its own known, isolated deleted asset
+ * instead of depending on whatever pre-existing seed data happens to
+ * already be in the bin. Returns the identifying values so the caller can
+ * find this exact row inside the Recycle Bin (by Name or Serial Number).
+ */
+async function createAndDeleteLaptop() {
+  const { name, serialNumber } = generateUniqueLaptopAsset();
+  await assetsPage.openAddAssetModal();
+  await assetsPage.selectAssetType(assetTypeOptions.laptop);
+  await assetsPage.fillLaptopForm({ name, serialNumber });
+  await assetsPage.submitAssetForm();
+  await assetsPage.waitForAddAssetModalToClose();
+
+  await assetsPage.deleteAssetBySerialNumber(serialNumber);
+  return { name, serialNumber };
+}
+
+test.describe('Assets Page - Recycle Bin', () => {
+  test('TC_RB_001 - open Recycle Bin', async () => {
+    await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+    await expect(assetsPage.recycleBinHeading).toBeVisible();
+  });
+
+  test('TC_RB_002 - deleted assets are displayed in Recycle Bin', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    const rowCount = await assetsPage.getRecycleBinRowCount();
+    expect(rowCount).toBeGreaterThan(0);
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(serialNumber))).toBe(true);
+  });
+
+  test('TC_RB_003 - Restore and Permanent Delete actions are displayed for a deleted asset', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    const row = assetsPage.recycleBinRows.filter({ hasText: serialNumber }).first();
+    await expect(row.getByRole('button', { name: 'Restore', exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Permanent Delete', exact: true })).toBeVisible();
+  });
+
+  test('TC_RB_004 - restore a deleted asset', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.restoreAssetByText(serialNumber);
+
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(serialNumber))).toBe(false);
+  });
+
+  test('TC_RB_005 - restore success message is displayed', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.restoreAssetByText(serialNumber);
+    await assetsPage.expectToast(recycleBinToastPatterns.restored);
+  });
+
+  test('TC_RB_006 - restored asset is removed from Recycle Bin', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+    const baselineCount = await assetsPage.getRecycleBinRowCount();
+
+    await assetsPage.restoreAssetByText(serialNumber);
+
+    const countAfterRestore = await assetsPage.getRecycleBinRowCount();
+    expect(countAfterRestore).toBe(baselineCount - 1);
+  });
+
+  test('TC_RB_007 - restored asset is available in the Assets list', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+    await assetsPage.restoreAssetByText(serialNumber);
+    await assetsPage.closeRecycleBin();
+
+    await assetsPage.search(serialNumber);
+    const rowCount = await assetsPage.getVisibleRowCount();
+    expect(rowCount).toBe(1);
+  });
+
+  test('TC_RB_008 - open permanent delete confirmation dialog', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await expect(assetsPage.confirmDeleteDialogHeading).toBeVisible();
+  });
+
+  test('TC_RB_009 - permanent deletion warning message is displayed', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await expect(assetsPage.confirmDeleteWarningText).toBeVisible();
+    // Confirm the dialog's copy matches the manual test data doc's exact
+    // wording (falls back to the looser toBeVisible() check above if the
+    // real app's phrasing differs slightly).
+    await expect(assetsPage.confirmDeleteDialog).toContainText(recycleBinText.confirmDeleteWarning);
+  });
+
+  test('TC_RB_010 - Cancel and Delete Permanently buttons are displayed in the confirmation dialog', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await expect(assetsPage.confirmDeleteCancelButton).toBeVisible();
+    await expect(assetsPage.confirmDeletePermanentlyButton).toBeVisible();
+  });
+
+  test('TC_RB_011 - cancel permanent deletion', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await assetsPage.cancelPermanentDelete();
+
+    await expect(assetsPage.confirmDeleteDialogHeading).not.toBeVisible();
+    await expect(assetsPage.recycleBinHeading).toBeVisible();
+  });
+
+  test('TC_RB_012 - asset remains in Recycle Bin after cancelling permanent deletion', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await assetsPage.cancelPermanentDelete();
+
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(serialNumber))).toBe(true);
+  });
+
+  test('TC_RB_013 - permanently delete an asset', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await assetsPage.confirmPermanentDelete();
+
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(serialNumber))).toBe(false);
+  });
+
+  test('TC_RB_014 - permanent deletion success message is displayed', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await assetsPage.confirmPermanentDelete();
+    await assetsPage.expectToast(recycleBinToastPatterns.permanentlyDeleted);
+  });
+
+  test('TC_RB_015 - permanently deleted asset is removed from Recycle Bin', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+
+    await assetsPage.openRecycleBin();
+
+    const baselineCount = await assetsPage.getRecycleBinRowCount();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await assetsPage.confirmPermanentDelete();
+
+  // Wait until the permanently deleted asset is no longer present
+    await expect(
+      assetsPage.page.getByText(serialNumber, { exact: true })
+    ).not.toBeVisible({ timeout: 10000 });
+
+    const countAfterDelete = await assetsPage.getRecycleBinRowCount();
+
+    expect(countAfterDelete).toBe(baselineCount - 1);
+  });
+
+  test('TC_RB_016 - permanently deleted asset cannot be restored', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await assetsPage.confirmPermanentDelete();
+
+    // Reopen (close/reopen) the bin — the asset must stay gone rather
+    // than reappearing, and there is no Restore action left to click.
+    await assetsPage.closeRecycleBin();
+    await assetsPage.openRecycleBin();
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(serialNumber))).toBe(false);
+  });
+
+  test('TC_RB_017 - restore multiple deleted assets', async () => {
+    const assetA = await createAndDeleteLaptop();
+    const assetB = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.restoreAssetByText(assetA.serialNumber);
+    await assetsPage.restoreAssetByText(assetB.serialNumber);
+
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(assetA.serialNumber))).toBe(false);
+    expect(rowTexts.some((t) => t.includes(assetB.serialNumber))).toBe(false);
+  });
+
+  test('TC_RB_018 - permanently delete multiple deleted assets', async () => {
+    const assetA = await createAndDeleteLaptop();
+    const assetB = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(assetA.serialNumber);
+    await assetsPage.confirmPermanentDelete();
+    await assetsPage.openPermanentDeleteConfirmByText(assetB.serialNumber);
+    await assetsPage.confirmPermanentDelete();
+
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(assetA.serialNumber))).toBe(false);
+    expect(rowTexts.some((t) => t.includes(assetB.serialNumber))).toBe(false);
+  });
+
+  test('TC_RB_019 - only restored/deleted assets are removed after partial actions', async () => {
+    const assetA = await createAndDeleteLaptop();
+    const assetB = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+    const baselineCount = await assetsPage.getRecycleBinRowCount();
+
+    await assetsPage.restoreAssetByText(assetA.serialNumber);
+    await assetsPage.openPermanentDeleteConfirmByText(assetB.serialNumber);
+    await assetsPage.confirmPermanentDelete();
+
+    const countAfter = await assetsPage.getRecycleBinRowCount();
+    expect(countAfter).toBe(baselineCount - 2);
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(assetA.serialNumber))).toBe(false);
+    expect(rowTexts.some((t) => t.includes(assetB.serialNumber))).toBe(false);
+  });
+
+
+  test('TC_RB_020 - Recycle Bin data is correct after closing and reopening', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+    await assetsPage.closeRecycleBin();
+
+    await assetsPage.openRecycleBin();
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(serialNumber))).toBe(true);
+  });
+
+  test('TC_RB_021 - restored asset remains in Assets list after reopening the page', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+    await assetsPage.restoreAssetByText(serialNumber);
+    await assetsPage.closeRecycleBin();
+
+    // "Reopening the page" — navigate to Assets fresh via a reload.
+    await assetsPage.page.reload();
+    await expect(assetsPage.heading).toBeVisible();
+
+    await assetsPage.search(serialNumber);
+    const rowCount = await assetsPage.getVisibleRowCount();
+    expect(rowCount).toBe(1);
+  });
+
+  test('TC_RB_022 - permanent deletion persists after reopening Recycle Bin', async () => {
+    const { serialNumber } = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+    await assetsPage.openPermanentDeleteConfirmByText(serialNumber);
+    await assetsPage.confirmPermanentDelete();
+    await assetsPage.closeRecycleBin();
+
+    await assetsPage.openRecycleBin();
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(serialNumber))).toBe(false);
+  });
+
+  test('TC_RB_023 - restoring one asset does not affect another deleted asset', async () => {
+    const assetA = await createAndDeleteLaptop();
+    const assetB = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.restoreAssetByText(assetA.serialNumber);
+
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(assetA.serialNumber))).toBe(false);
+    expect(rowTexts.some((t) => t.includes(assetB.serialNumber))).toBe(true);
+
+    await assetsPage.closeRecycleBin();
+    await assetsPage.search(assetA.serialNumber);
+    expect(await assetsPage.getVisibleRowCount()).toBe(1);
+  });
+
+  test('TC_RB_024 - permanently deleting one asset does not affect another deleted asset', async () => {
+    const assetA = await createAndDeleteLaptop();
+    const assetB = await createAndDeleteLaptop();
+    await assetsPage.openRecycleBin();
+
+    await assetsPage.openPermanentDeleteConfirmByText(assetA.serialNumber);
+    await assetsPage.confirmPermanentDelete();
+
+    const rowTexts = await assetsPage.getRecycleBinRowTexts();
+    expect(rowTexts.some((t) => t.includes(assetA.serialNumber))).toBe(false);
+    expect(rowTexts.some((t) => t.includes(assetB.serialNumber))).toBe(true);
   });
 });
