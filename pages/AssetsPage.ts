@@ -70,6 +70,32 @@ export class AssetsPage {
   readonly importCancelButton: Locator;
   readonly importFailedMessage: Locator;
 
+  // --- Add Asset modal ---
+  readonly addAssetButton: Locator;
+  readonly addAssetHeading: Locator;
+  readonly assetTypeSelectButton: Locator;
+  readonly nameInput: Locator;
+  readonly serialNumberInput: Locator;
+  readonly locationInput: Locator;
+  readonly purchaseDateInput: Locator;
+  readonly warrantyInput: Locator;
+  readonly cpuInput: Locator;
+  readonly gpuInput: Locator;
+  readonly ramInput: Locator;
+  readonly storageInput: Locator;
+  readonly operatingSystemInput: Locator;
+  readonly descriptionEditor: Locator;
+  readonly statusFieldButton: Locator;
+  readonly conditionFieldButton: Locator;
+  readonly brandFieldButton: Locator;
+  readonly createAssetButton: Locator;
+  readonly cancelAssetButton: Locator;
+  // Generic catch-all for any inline validation message the form renders.
+  // Exact wording is unconfirmed against the real app, so this is kept
+  // broad on purpose — hasVisibleValidationError() below only needs to
+  // know that *some* error appeared, not its exact copy.
+  readonly assetFormValidationError: Locator;
+
   constructor(page: Page) {
     this.page = page;
 
@@ -130,6 +156,112 @@ export class AssetsPage {
     // Non-exact: the app may append extra detail after "Import failed"
     // (e.g. a reason), so this matches the stable leading substring.
     this.importFailedMessage = page.getByText('Import failed');
+
+    // --- Add Asset modal ---
+    // The form itself is confirmed (via codegen) to live inside a container
+    // with id="asset-form". Individual fields have visible label text, but
+    // codegen fell back to `getByText(label)` + positional
+    // `getByRole('textbox').nth(n)` rather than `getByLabel(label)` to
+    // reach each input — meaning the labels are NOT programmatically
+    // associated to their inputs (no `<label for>`/aria-labelledby). A raw
+    // positional index breaks the moment a field is added, removed, or
+    // reordered above it, so instead assetFormField() below scopes to each
+    // field's own wrapper <div> (matched by its exact label text) and grabs
+    // the input inside that wrapper specifically.
+    //
+    // NOTE FOR MAINTAINERS: if a field's wrapper isn't cleanly isolated by
+    // label text against the real running app, replace that one field's
+    // locator with a direct one you capture from it (e.g.
+    // page.locator('#asset-form input[name="name"]')) once real
+    // id/name attributes are visible — that's the recommended long-term fix.
+    this.addAssetButton = page.getByRole('button', { name: 'Add Asset', exact: true });
+    this.addAssetHeading = page.getByRole('heading', { name: 'Add Asset', exact: true });
+    // NOTE: originally matched by the button's fixed accessible name
+    // 'Select type...' — but a real run (TC_ADD_23) showed that name
+    // changes to the selected value (e.g. 'Laptop') after first use, so a
+    // name-anchored locator stops matching on any later re-selection.
+    // Anchored to the field's own label wrapper instead, which stays
+    // stable regardless of the button's current text — same pattern as
+    // statusFieldButton/conditionFieldButton/brandFieldButton above.
+    this.assetTypeSelectButton = page
+      .locator('#asset-form')
+      .locator('div')
+      .filter({ hasText: /^Asset Type/ })
+      .getByRole('button')
+      .first();
+
+    this.nameInput = this.assetFormField('Name');
+    this.serialNumberInput = this.assetFormField('Serial Number');
+    this.locationInput = this.assetFormField('Location');
+    this.cpuInput = this.assetFormField('CPU');
+    this.gpuInput = this.assetFormField('GPU');
+    this.ramInput = this.assetFormField('RAM \\(GB\\)');
+    this.storageInput = this.assetFormField('Storage \\(GB\\)');
+    this.operatingSystemInput = this.assetFormField('Operating system');
+    this.warrantyInput = this.assetFormField('Warranty \\(Years\\)');
+
+    // Status/Condition/Brand are custom dropdowns (trigger button + option
+    // list), the same interaction pattern already used by the page-level
+    // Status/Type filters above — located as the button inside each field's
+    // own labeled wrapper.
+    this.statusFieldButton = page
+      .locator('#asset-form')
+      .locator('div')
+      .filter({ hasText: /^Status/ })
+      .getByRole('button')
+      .first();
+    this.conditionFieldButton = page
+      .locator('#asset-form')
+      .locator('div')
+      .filter({ hasText: /^Condition/ })
+      .getByRole('button')
+      .first();
+    this.brandFieldButton = page
+      .locator('#asset-form')
+      .locator('div')
+      .filter({ hasText: /^Brand/ })
+      .getByRole('button')
+      .first();
+
+    this.purchaseDateInput = page.locator('#asset-form input[type="date"]');
+
+    // The rich-text Description editor renders as a contenteditable region
+    // beneath its Bold/Italic/List toolbar (confirmed via codegen:
+    // `.locator('.min-h-\\[120px\\]')`), not a plain <textarea>.
+    this.descriptionEditor = page.locator('#asset-form .min-h-\\[120px\\]');
+
+    this.createAssetButton = page.getByRole('button', { name: 'Create', exact: true });
+    // NOTE: originally scoped to `#asset-form`, matching the assumption
+    // that Cancel lives inside the same container as the fields. A real
+    // test run (TC_ADD_21/22) showed that scope times out — Cancel is
+    // rendered in the modal's footer, outside the <form id="asset-form">
+    // element itself (only Create, the submit button, lives inside it,
+    // which is why createAssetButton above was never scoped and still
+    // worked). Matched page-wide instead.
+    this.cancelAssetButton = page.getByRole('button', { name: 'Cancel', exact: true });
+
+    this.assetFormValidationError = page
+      .locator('#asset-form')
+      .locator('[role="alert"], .text-red-500, .text-destructive, .error');
+  }
+
+  /**
+   * Locates a labeled field's input inside the Add Asset form (#asset-form)
+   * by its visible label text, instead of a global positional textbox
+   * index (see the constructor comment above for why). Scopes to the
+   * wrapper <div> whose own text is exactly the given label, then returns
+   * the first text-entry control inside that wrapper.
+   *
+   * `labelText` may include regex-escaped parentheses (e.g. 'RAM \\(GB\\)')
+   * since a couple of real labels contain literal parentheses.
+   */
+  private assetFormField(labelText: string): Locator {
+    return this.page
+      .locator('#asset-form')
+      .locator('div')
+      .filter({ hasText: new RegExp(`^${labelText}$`) })
+      .locator('input, textarea')
+      .first();
   }
 
   async goto() {
@@ -493,5 +625,130 @@ export class AssetsPage {
   async cancelImport() {
     await this.importCancelButton.click();
     await expect(this.importModalHeading).not.toBeVisible();
+  }
+
+  // ---------------------------------------------------------------------
+  // Add Asset feature helpers
+  // ---------------------------------------------------------------------
+
+  /** Opens the Add Asset modal and waits for its heading to render. */
+  async openAddAssetModal() {
+    await this.addAssetButton.click();
+    await expect(this.addAssetHeading).toBeVisible();
+  }
+
+  /** Opens the Asset Type dropdown and selects the given type
+   * (e.g. 'Laptop'). Options confirmed via codegen/screenshot. */
+  async selectAssetType(assetType: string) {
+    await this.assetTypeSelectButton.click();
+    await this.page.getByRole('option', { name: assetType, exact: true }).click();
+  }
+
+  /** Opens a custom-dropdown field (Status/Condition/Brand) inside the Add
+   * Asset form and selects the given option — shares the button+option
+   * interaction pattern already used by filterByStatus() above, scoped
+   * here to whichever field's trigger button is passed in. */
+  async selectAssetFormDropdown(fieldButton: Locator, optionName: string) {
+    await fieldButton.click();
+    await this.page.getByRole('option', { name: optionName, exact: true }).click();
+  }
+
+  /**
+   * Fills the Laptop Add Asset form from a single data object. Any
+   * property left `undefined` is simply skipped, so individual test cases
+   * can populate only the fields relevant to that scenario (e.g. leaving
+   * every optional field out for TC_ADD_12, the "optional fields empty"
+   * case). Does NOT open the modal or select Asset Type — call
+   * openAddAssetModal() and selectAssetType('Laptop') first.
+   *
+   * NOTE ON `location`: confirmed via a real test run to be a read-only,
+   * system-populated field in the actual app (rendered as
+   * `<input readonly class="... cursor-not-allowed">` with a pre-filled
+   * value) — NOT a user-editable text field, despite earlier assumptions.
+   * `data.location` is accepted here for interface/documentation
+   * compatibility but is intentionally never filled; use
+   * verifyLocationIsReadonly() to assert its pre-filled value instead.
+   */
+  async fillLaptopForm(data: {
+    name?: string;
+    serialNumber?: string;
+    status?: string;
+    condition?: string;
+    location?: string;
+    purchaseDate?: string; // 'YYYY-MM-DD'
+    warrantyYears?: string;
+    brand?: string;
+    cpu?: string;
+    gpu?: string;
+    ramGb?: string;
+    storageGb?: string;
+    operatingSystem?: string;
+    description?: string;
+  }) {
+    if (data.name !== undefined) await this.nameInput.fill(data.name);
+    if (data.serialNumber !== undefined) await this.serialNumberInput.fill(data.serialNumber);
+    if (data.status !== undefined) await this.selectAssetFormDropdown(this.statusFieldButton, data.status);
+    if (data.condition !== undefined) await this.selectAssetFormDropdown(this.conditionFieldButton, data.condition);
+    // data.location deliberately not filled — see note above.
+    if (data.purchaseDate !== undefined) await this.purchaseDateInput.fill(data.purchaseDate);
+    if (data.warrantyYears !== undefined) await this.warrantyInput.fill(data.warrantyYears);
+    if (data.brand !== undefined) await this.selectAssetFormDropdown(this.brandFieldButton, data.brand);
+    if (data.cpu !== undefined) await this.cpuInput.fill(data.cpu);
+    if (data.gpu !== undefined) await this.gpuInput.fill(data.gpu);
+    if (data.ramGb !== undefined) await this.ramInput.fill(data.ramGb);
+    if (data.storageGb !== undefined) await this.storageInput.fill(data.storageGb);
+    if (data.operatingSystem !== undefined) await this.operatingSystemInput.fill(data.operatingSystem);
+    if (data.description !== undefined) await this.descriptionEditor.fill(data.description);
+  }
+
+  /**
+   * Asserts the Location field is read-only and already holds a non-empty,
+   * system-populated value (see fillLaptopForm's note on `location` above).
+   * Pass an expectedValue to assert the exact pre-filled text; omit it to
+   * just assert "read-only and non-empty".
+   */
+  async verifyLocationIsReadonly(expectedValue?: string) {
+    await expect(this.locationInput).toHaveAttribute('readonly', /.*/);
+    if (expectedValue !== undefined) {
+      await expect(this.locationInput).toHaveValue(expectedValue);
+    } else {
+      const value = await this.locationInput.inputValue();
+      expect(value.length).toBeGreaterThan(0);
+    }
+  }
+
+
+  /** Clicks Create. Callers assert the outcome themselves (new row added
+   * vs. validation error kept the modal open), since both are legitimate
+   * outcomes depending on the data a given test supplied. */
+  async submitAssetForm() {
+    await this.createAssetButton.click();
+  }
+
+  /** Closes the Add Asset modal via Cancel, discarding any entered data. */
+  async cancelAddAsset() {
+    await this.cancelAssetButton.click();
+    await expect(this.addAssetHeading).not.toBeVisible();
+  }
+
+  /**
+   * Returns true if, after a submit attempt, the form is still open AND
+   * showing at least one validation error. Used for required-field /
+   * negative test cases without hardcoding exact error copy that hasn't
+   * been confirmed against the real running app.
+   */
+  async hasVisibleValidationError(): Promise<boolean> {
+    const modalStillOpen = await this.addAssetHeading.isVisible().catch(() => false);
+    const errorVisible = await this.assetFormValidationError.first().isVisible().catch(() => false);
+    return modalStillOpen && errorVisible;
+  }
+
+  /**
+   * Waits for the Add Asset modal to close after a successful submit.
+   * Distinct from cancelAddAsset()'s close-assertion since a successful
+   * Create may take a moment (API round-trip) before the modal dismisses.
+   */
+  async waitForAddAssetModalToClose() {
+    await expect(this.addAssetHeading).not.toBeVisible({ timeout: 10000 });
   }
 }

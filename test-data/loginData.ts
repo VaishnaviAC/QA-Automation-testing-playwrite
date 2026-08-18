@@ -9,8 +9,8 @@
  * NOTE: For process.env.ADMIN_EMAIL / process.env.ADMIN_PASSWORD to
  * actually pick up real values instead of the fallback, you need to:
  *   1. Create a .env file in the project root with:
- *        ADMIN_EMAIL=admin@accurateic.in
- *        ADMIN_PASSWORD=12345
+ *        ADMIN_EMAIL=vaishnavi.patil@accurateic.in
+ *        ADMIN_PASSWORD=Password@123
  *   2. Install dotenv: npm install dotenv --save-dev
  *   3. Load it at the top of playwright.config.ts:
  *        import 'dotenv/config';
@@ -21,8 +21,8 @@
 export const loginData = {
   // Valid credentials for a successful login
   validUser: {
-    email: process.env.ADMIN_EMAIL ?? 'admin@accurateic.in',
-    password: process.env.ADMIN_PASSWORD ?? '12345',
+    email: process.env.ADMIN_EMAIL ?? 'vaishnavi.patil@accurateic.in',
+    password: process.env.ADMIN_PASSWORD ?? 'Password@123',
   },
 
   // Deliberately invalid inputs, used in the negative login test cases
